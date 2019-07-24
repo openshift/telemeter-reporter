@@ -1,0 +1,145 @@
+---
+email:
+  from: sla-reporting@redhat.com
+  to: abyrne@redhat.com
+api:
+  telemeter:
+    url: "https://telemeter-lts.datahub.redhat.com"
+    token: "[REDACTED]"
+  uhc:
+    url: "https://api.openshift.com"
+    public_key: |
+      -----BEGIN PUBLIC KEY-----
+      [REDACTED]
+      -----END PUBLIC KEY-----
+    token: |
+      [REDACTED]
+clusters:
+  - "external_id = 'c03103eb-1571-498d-b1fd-70587b445faa'"
+  - "external_id = '18e66bcf-3090-4519-a188-4ffb63fb6104'"
+  #- "managed = 't'"
+rules:
+  - name: "CtrlPlane General"
+    sla: 0.995
+    duration: 7
+    query: |
+      1 - clamp_max(sum_over_time(
+        (sum by (_id) (
+          alerts{
+            severity='critical',
+            alertstate='firing',
+            namespace=~'(default|kube.*|openshift.*)',
+            alertname=~'(KubeAPIDown|KubeControllerManagerDown|KubeSchedulerDown|KubeletDown|KubeAPILatencyHigh)',
+            ${sel}
+          }
+        ) > bool 0)[${duration}d:1m]
+      ) / (${duration} * 24 * 60) > 0, 1)
+  - name: "CtrlPlane API"
+    sla: 0.999
+    duration: 7
+    query: |
+      (
+        (
+          sum(sum_over_time(code:apiserver_request_count:rate:sum{${sel}}[${duration}d])) - 
+          sum(sum_over_time(code:apiserver_request_count:rate:sum{code=~'5.*',${sel}}[${duration}d]))
+        ) / sum(sum_over_time(code:apiserver_request_count:rate:sum{${sel}}[${duration}d]))
+      ) OR (absent(code:apiserver_request_count:rate:sum{code=~'5.*',${sel}} == 0))
+  - name: "CtrlPlane etcd"
+    sla: 0.999
+    duration: 7
+    query: |
+      clamp_max(
+        sum_over_time(
+          (
+            sum(up{service='etcd',${sel}}) > bool 0
+          )[${duration}d:1m]
+        ) / (${duration} * 24 * 60) > 0, 1
+      )
+  - name: "CtrlPlane Latency"
+    sla: 0.995
+    duration: 7
+    query: |
+        clamp_max(
+          sum_over_time(
+            (clamp_max(
+              sum without (alertstate, severity) (
+                absent(alerts{
+                  severity='critical',
+                  alertstate='firing',
+                  namespace=~'(default|kube.*|openshift.*)',
+                  alertname=~'(KubeAPILatencyHigh)',
+                  ${sel}
+                })
+              ),1
+            ))[${duration}d:1m]
+          ) / (${duration} * 24 * 60) > 0, 1
+        )
+  - name: "Registry General"
+    sla: 0.99
+    duration: 7
+    query: |
+      clamp_max(
+        sum_over_time(
+          (
+            sum(up{service='image-registry',${sel}}) > bool 0
+          )[${duration}d:1m]
+        ) / (${duration} * 24 * 60) > 0, 1
+      )
+  - name: "Compute General"
+    sla: 0.995
+    duration: 7
+    query: |
+        clamp_max(
+          sum_over_time(
+            (clamp_max(
+              sum without (alertstate, severity) (
+                absent(alerts{
+                  severity='critical',
+                  alertstate='firing',
+                  namespace=~'(default|kube.*|openshift.*)',
+                  alertname=~'(KubeClientCertificateExpiration|KubePodCrashLooping|KubePodNotReady|KubePersistentVolumeUsageCritical)',
+                  ${sel}
+                })
+              ),1
+            ))[${duration}d:1m]
+          ) / (${duration} * 24 * 60) > 0, 1
+        )
+  - name: "Compute Resiliency"
+    sla: 0.99
+    duration: 7
+    query: |
+        clamp_max(
+          sum_over_time(
+            (clamp_max(
+              sum without (alertstate, severity) (
+                absent(alerts{
+                  severity='critical',
+                  alertstate='firing',
+                  namespace=~'(default|kube.*|openshift.*)',
+                  alertname=~'(.*Mismatch|.*Stuck)',
+                  ${sel}
+                })
+              ),1
+            ))[${duration}d:1m]
+          ) / (${duration} * 24 * 60) > 0, 1
+        )
+  - name: "Support Monitoring"
+    sla: 0.9999
+    duration: 7
+    query: |
+        clamp_max(
+          sum_over_time(
+            (clamp_max(
+              sum without (alertstate, severity) (
+                absent(alerts{
+                  severity='critical',
+                  alertstate='firing',
+                  namespace=~'(default|kube.*|openshift.*)',
+                  alertname=~'(ClusterMonitoringOperator.*|KubeStateMetricsDown|Prometheus.*Down)',
+                  ${sel}
+                })
+              ),1
+            ))[${duration}d:1m]
+          ) / (${duration} * 24 * 60) > 0, 1
+        )
+...

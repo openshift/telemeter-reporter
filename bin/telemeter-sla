@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-import sys;
+import csv
+import io
+import sys
 
-print('Python %s on %s' % (sys.version, sys.platform))
+#print('Python %s on %s' % (sys.version, sys.platform))
+# TODO REMOVE PATH EXTEND!
 sys.path.extend(['/home/abyrne/Documents/telemeter-sla-reporter'])
 from telemeter_sla_reporter import SLAReporter
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
@@ -9,24 +12,24 @@ import yaml
 import os.path
 
 # Handle command line args
-argp = ArgumentParser(
+arg_parser = ArgumentParser(
     formatter_class=ArgumentDefaultsHelpFormatter,
     description="Tool for generating reports on SLA/SLO compliance using Telemeter-LTS data",
 )
 
-argp.add_argument(
+arg_parser.add_argument(
     "-c", "--config", help="Path to YAML file containing configuration data", default="~/.telemeter_sla_reporter.yml"
 )
-argp.add_argument(
+arg_parser.add_argument(
     "-o", "--output", help="Path to where to save the generated report (- = stdout)", default="-"
 )
-argp.add_argument(
+arg_parser.add_argument(
     "-f", "--format", help="Tabulate format for the report", default="simple",
 )
-argp.add_argument(
+arg_parser.add_argument(
     "-q", "--uhc-query", help="Report on all clusters returned by this query to the UHC API",
 )
-args = argp.parse_args()
+args = arg_parser.parse_args()
 
 # Load config file
 with open(os.path.expanduser(args.config), 'r') as f:
@@ -37,14 +40,14 @@ slar = SLAReporter(config)
 
 # Get Cluster external_ids
 if args.uhc_query:
-    clids = slar.get_cluster_ids(args.uhc_query)
+    cluster_ids = slar.get_cluster_ids(args.uhc_query)
 else:
-    clids = {}
+    cluster_ids = {}
     for uhc_query in config['clusters']:
-        clids.update(slar.get_cluster_ids(uhc_query))
+        cluster_ids.update(slar.get_cluster_ids(uhc_query))
 
 # Do the actual queries (this may take a while...)
-rep = slar.generate_report(clids, fmt=args.format)
+raw_report = slar.generate_report(cluster_ids, fmt=args.format)
 
 pure_css = """<style> .pure-table{border-collapse:collapse;border-spacing:0;empty-cells:show;border:1px solid 
 #cbcbcb;font-family:Sans-serif}.pure-table td,.pure-table th{border-left:1px solid #cbcbcb;border-width:0 0 0 
@@ -56,9 +59,21 @@ tr:last-child > td{border-bottom-width:0}.pure-table-horizontal td,.pure-table-h
 1px;border-bottom:1px solid #cbcbcb}.pure-table-horizontal tbody > tr:last-child > td{border-bottom-width:0}.danger{
 color:red;font-weight:700}.caution{color:#ff8c00;font-weight:700}.success{color:green} </style>"""
 # Format the report
-headers = [x.replace(' ', '\n') for x in slar.generate_headers()]
-formatted_report = slar.format_report(headers, rep, css=pure_css, fmt=args.format).replace("<table>",
-                                                                                           "<table class='pure-table pure-table-striped pure-table-horizontal'>")
+if args.format == "html":
+    headers = slar.generate_headers()
+    formatted_report = slar.format_report(headers=headers, table=raw_report, css=pure_css, fmt=args.format)
+    formatted_report = formatted_report.replace("<table>",
+                                                "<table class='pure-table pure-table-striped pure-table-horizontal'>")
+elif args.format == "csv":
+    str_buff = io.StringIO()
+    csv_writer = csv.writer(str_buff)
+    for row in [slar.generate_headers()] + raw_report:
+        csv_writer.writerow(row)
+    formatted_report = str_buff.getvalue().replace('%', '')
+    str_buff.close()
+else:
+    headers = [x.replace(' ', '\n') for x in slar.generate_headers()]
+    formatted_report = slar.format_report(headers=headers, table=raw_report, fmt=args.format)
 
 if args.output == "-":
     print(formatted_report)

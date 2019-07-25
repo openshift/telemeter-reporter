@@ -56,10 +56,10 @@ class SLAReporter:
         :returns: (dict) a dict with selected cluster names as keys and
             their external_ids as values
         """
-        clist = self.uhc.search_clusters(search_query)
+        cluster_list = self.uhc.search_clusters(search_query)
         return {
             x["name"]: "_id='{}'".format(x["external_id"])
-            for x in clist["items"]
+            for x in cluster_list["items"]
             if "external_id" in x.keys()
         }
 
@@ -85,10 +85,10 @@ class SLAReporter:
                     **{"sel": selector},
                 }
                 query = Template(rule["query"]).substitute(**query_params)
+                sla = float(rule["sla"]) * 100
                 try:
                     query_res = self.pc.custom_query(query)
                     sli = round(float(query_res[0]["value"][1]) * 100, 4)
-                    sla = float(rule["sla"]) * 100
                     row += [
                         str(sla) + ("&#37;" if fmt == "html" else "%"),
                         self.__format_sli(sli, sla, fmt),
@@ -148,7 +148,7 @@ class SLAReporter:
             try:
                 requests.get(url)
                 success = True
-            except requests.exceptions.SSLError as err:
+            except requests.exceptions.SSLError:
                 cafile = certifi.where()
                 with open("RHCertBundle.pem", "rb") as infile:
                     customca = infile.read()

@@ -94,7 +94,7 @@ class SLAReporter:
                         self.__format_sli(sli, sla, fmt),
                     ]
                 except:
-                    print("Query failed:" + str(query))
+                    #print("Query failed:" + str(query)) # TODO RE-ENABLE LOGGING
                     row += [str(sla) + ("&#37;" if fmt == "html" else "%"), ""]
             table.append(row)
 

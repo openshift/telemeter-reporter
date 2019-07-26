@@ -2,14 +2,28 @@
 import csv
 import io
 import sys
+import urllib.parse
+import webbrowser
+import signal
 
-#print('Python %s on %s' % (sys.version, sys.platform))
+# print('Python %s on %s' % (sys.version, sys.platform))
 # TODO REMOVE PATH EXTEND!
 sys.path.extend(['/home/abyrne/Documents/telemeter-sla-reporter'])
+
+
 from telemeter_sla_reporter import SLAReporter
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import yaml
 import os.path
+
+
+# Handle Ctrl-C
+def signal_handler(sig, frame):
+    print('Received SIGINT. Exiting...')
+    sys.exit(0)
+
+
+signal.signal(signal.SIGINT, signal_handler)
 
 # Handle command line args
 arg_parser = ArgumentParser(
@@ -18,16 +32,23 @@ arg_parser = ArgumentParser(
 )
 
 arg_parser.add_argument(
-    "-c", "--config", help="Path to YAML file containing configuration data", default="~/.telemeter_sla_reporter.yml"
+    "-c", "--config", help="Path to YAML file containing configuration data", default="~/.telemeter_sla_reporter.yml",
+    metavar="PATH"
 )
 arg_parser.add_argument(
-    "-o", "--output", help="Path to where to save the generated report (- = stdout)", default="-"
+    "output", help="Path to where to save the generated report (- = stdout)"
+)
+format_choices=['simple', 'plain', 'html', 'csv', 'grid', 'fancy_grid', 'github', 'jira', 'latex', ]
+arg_parser.add_argument(
+    "-f", "--format", help="Format for the report. Options: {}".format(str(format_choices)), default="simple", metavar="FMT",
+    choices=format_choices
 )
 arg_parser.add_argument(
-    "-f", "--format", help="Tabulate format for the report", default="simple",
+    "-u", "--uhc-query", help="Report on all clusters returned by this query to the UHC API", metavar='QUERY'
 )
 arg_parser.add_argument(
-    "-q", "--uhc-query", help="Report on all clusters returned by this query to the UHC API",
+    "-b", "--no-browser", help="Don't open the resulting report in a web browser (if HTML report is selected)",
+    action="store_true",
 )
 args = arg_parser.parse_args()
 
@@ -58,6 +79,7 @@ background-color:#f2f2f2}.pure-table-bordered td{border-bottom:1px solid #cbcbcb
 tr:last-child > td{border-bottom-width:0}.pure-table-horizontal td,.pure-table-horizontal th{border-width:0 0 
 1px;border-bottom:1px solid #cbcbcb}.pure-table-horizontal tbody > tr:last-child > td{border-bottom-width:0}.danger{
 color:red;font-weight:700}.caution{color:#ff8c00;font-weight:700}.success{color:green} </style>"""
+
 # Format the report
 if args.format == "html":
     headers = slar.generate_headers()
@@ -75,8 +97,12 @@ else:
     headers = [x.replace(' ', '\n') for x in slar.generate_headers()]
     formatted_report = slar.format_report(headers=headers, table=raw_report, fmt=args.format)
 
+# Output report
 if args.output == "-":
     print(formatted_report)
 else:
-    with open(args.output, 'w') as f:
+    save_path = os.path.abspath(os.path.expanduser(args.output))
+    with open(save_path, 'w') as f:
         f.write(formatted_report)
+    if args.format == "html" and not args.no_browser:
+        webbrowser.open_new_tab("file://" + urllib.parse.quote(save_path))

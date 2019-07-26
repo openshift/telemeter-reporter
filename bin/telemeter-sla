@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
-import csv
-import io
+import logging
+import os.path
+import signal
 import sys
 import urllib.parse
 import webbrowser
-import signal
+from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
+
+import yaml
 
 # print('Python %s on %s' % (sys.version, sys.platform))
 # TODO REMOVE PATH EXTEND!
 sys.path.extend(['/home/abyrne/Documents/telemeter-sla-reporter'])
 
-
 from telemeter_sla_reporter import SLAReporter
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-import yaml
-import os.path
+
+logger = logging.getLogger(__name__)
 
 
 # Handle Ctrl-C
@@ -26,31 +27,28 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 # Handle command line args
-arg_parser = ArgumentParser(
-    formatter_class=ArgumentDefaultsHelpFormatter,
-    description="Tool for generating reports on SLA/SLO compliance using Telemeter-LTS data",
-)
+arg_parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter,
+                            description="Tool for generating reports on SLA/SLO compliance using "
+                                        "Telemeter-LTS data", )
 
-arg_parser.add_argument(
-    "-c", "--config", help="Path to YAML file containing configuration data", default="~/.telemeter_sla_reporter.yml",
-    metavar="PATH"
-)
-arg_parser.add_argument(
-    "output", help="Path to where to save the generated report (- = stdout)"
-)
-format_choices=['simple', 'plain', 'html', 'csv', 'grid', 'fancy_grid', 'github', 'jira', 'latex', ]
-arg_parser.add_argument(
-    "-f", "--format", help="Format for the report. Options: {}".format(str(format_choices)), default="simple", metavar="FMT",
-    choices=format_choices
-)
-arg_parser.add_argument(
-    "-u", "--uhc-query", help="Report on all clusters returned by this query to the UHC API", metavar='QUERY'
-)
-arg_parser.add_argument(
-    "-b", "--no-browser", help="Don't open the resulting report in a web browser (if HTML report is selected)",
-    action="store_true",
-)
+arg_parser.add_argument("-c", "--config", help="Path to YAML file containing configuration data",
+                        default="~/.telemeter_sla_reporter.yml", metavar="PATH")
+arg_parser.add_argument("output", help="Path to where to save the generated report (- = stdout)")
+format_choices = ['simple', 'plain', 'html', 'csv', 'grid', 'fancy_grid', 'github', 'jira', 'latex']
+arg_parser.add_argument("-f", "--format", default="simple", metavar="FMT", choices=format_choices,
+                        help="Format for the report. Options: {}".format(str(format_choices)))
+arg_parser.add_argument("-u", "--uhc-query", metavar='QUERY',
+                        help="Report on all clusters returned by this query to the UHC API")
+arg_parser.add_argument("-b", "--no-browser", action="store_true",
+                        help="Don't open the resulting report in a web browser (if HTML report is "
+                             "selected)")
+log_choices = ['critical', 'error', 'warning', 'info', 'debug']
+arg_parser.add_argument("-l", "--log", default='warning', metavar='QUERY', choices=log_choices,
+                        help="Set the verbosity/logging level. Options {}".format(log_choices))
 args = arg_parser.parse_args()
+
+# Set logging level
+logging.basicConfig(level=args.log.upper())
 
 # Load config file
 with open(os.path.expanduser(args.config), 'r') as f:
@@ -68,37 +66,30 @@ else:
         cluster_ids.update(slar.get_cluster_ids(uhc_query))
 
 # Do the actual queries (this may take a while...)
-raw_report = slar.generate_report(cluster_ids, fmt=args.format)
-
-pure_css = """<style> .pure-table{border-collapse:collapse;border-spacing:0;empty-cells:show;border:1px solid 
-#cbcbcb;font-family:Sans-serif}.pure-table td,.pure-table th{border-left:1px solid #cbcbcb;border-width:0 0 0 
-1px;font-size:inherit;margin:0;overflow:visible;padding:.5em 1em}.pure-table thead{
-background-color:#e0e0e0;color:#000;text-align:left;vertical-align:bottom}.pure-table td{
-background-color:transparent}.pure-table-odd td{background-color:#f2f2f2}.pure-table-striped tr:nth-child(2n-1) td{
-background-color:#f2f2f2}.pure-table-bordered td{border-bottom:1px solid #cbcbcb}.pure-table-bordered tbody > 
-tr:last-child > td{border-bottom-width:0}.pure-table-horizontal td,.pure-table-horizontal th{border-width:0 0 
-1px;border-bottom:1px solid #cbcbcb}.pure-table-horizontal tbody > tr:last-child > td{border-bottom-width:0}.danger{
-color:red;font-weight:700}.caution{color:#ff8c00;font-weight:700}.success{color:green} </style>"""
+raw_report = slar.generate_report(cluster_ids)
 
 # Format the report
 if args.format == "html":
+    # For HTML reports, we force color on and inject some additional CSS
     headers = slar.generate_headers()
-    formatted_report = slar.format_report(headers=headers, table=raw_report, css=pure_css, fmt=args.format)
-    formatted_report = formatted_report.replace("<table>",
-                                                "<table class='pure-table pure-table-striped pure-table-horizontal'>")
+    formatted_report = slar.format_report(headers=headers, raw_report=raw_report, fmt=args.format,
+                                          color=True).replace("<table>", "<table class='pure-table "
+                                                                         "pure-table-striped "
+                                                                         "pure-table-horizontal'>")
 elif args.format == "csv":
-    str_buff = io.StringIO()
-    csv_writer = csv.writer(str_buff)
-    for row in [slar.generate_headers()] + raw_report:
-        csv_writer.writerow(row)
-    formatted_report = str_buff.getvalue().replace('%', '')
-    str_buff.close()
+    # For CSV reports, we provide essentially raw data: no rounding, no percent signs, no color
+    headers = slar.generate_headers()
+    formatted_report = slar.format_report(headers=headers, raw_report=raw_report, fmt=args.format,
+                                          color=False)
 else:
+    # For all other formats, we break every header row at each space to reduce width, and only
+    # enable color if we're printing to stdout
     headers = [x.replace(' ', '\n') for x in slar.generate_headers()]
-    formatted_report = slar.format_report(headers=headers, table=raw_report, fmt=args.format)
+    formatted_report = slar.format_report(headers=headers, raw_report=raw_report, fmt=args.format,
+                                          color=(args.output == '-'))
 
 # Output report
-if args.output == "-":
+if args.output == '-':
     print(formatted_report)
 else:
     save_path = os.path.abspath(os.path.expanduser(args.output))

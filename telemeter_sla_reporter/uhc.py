@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
+import logging
+
 import jwt
 import requests
+
+logger = logging.getLogger(__name__)
 
 
 class UnifiedHybridClient:
@@ -26,12 +30,8 @@ class UnifiedHybridClient:
         self.public_key = public_key.strip() if public_key is not None else public_key
 
         # Extract info from the offline token
-        ot_decoded = jwt.decode(
-            self.offline_token,
-            self.public_key,
-            algorithms="RS256",
-            verify=(self.public_key is not None),
-        )
+        ot_decoded = jwt.decode(self.offline_token, self.public_key, algorithms="RS256",
+                                verify=(self.public_key is not None), )
         self.iss_url = ot_decoded["iss"]
         self.client_id = ot_decoded["aud"]
 
@@ -41,15 +41,11 @@ class UnifiedHybridClient:
 
         :returns: (str) a short-lived access token
         """
-        response = requests.post(
-            "{}/protocol/openid-connect/token".format(self.iss_url),
-            data={
-                "grant_type": "refresh_token",
-                "client_id": self.client_id,
-                "refresh_token": self.offline_token,
-            },
-            headers={"accept": "application/json"},
-        )
+        response = requests.post("{}/protocol/openid-connect/token".format(self.iss_url),
+                                 data={"grant_type":    "refresh_token",
+                                       "client_id":     self.client_id,
+                                       "refresh_token": self.offline_token, },
+                                 headers={"accept": "application/json"}, )
         return response.json()["access_token"]
 
     def search_clusters(self, query: str) -> dict:
@@ -62,22 +58,14 @@ class UnifiedHybridClient:
             cluster instead of the names of the columns of a table.
         :returns: (dict) the response from the API in dict format
         """
-        response = requests.get(
-            "{}/api/clusters_mgmt/v1/clusters".format(self.api_url),
-            verify=True,
-            headers={
-                "accept": "application/json",
-                "Authorization": "Bearer " + self.__get_access_token(),
-            },
-            params={"search": query},
-        )
+        response = requests.get("{}/api/clusters_mgmt/v1/clusters".format(self.api_url),
+                                verify=True, headers={"accept":        "application/json",
+                                                      "Authorization": "Bearer " + self.__get_access_token(), },
+                                params={"search": query}, )
         if response.status_code == 200:
             data = response.json()
         else:
             raise Exception(
-                "HTTP Status Code {} ({})".format(
-                    response.status_code, response.content
-                )
-            )
+                "HTTP Status Code {} ({})".format(response.status_code, response.content))
 
         return data

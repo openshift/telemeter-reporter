@@ -27,6 +27,22 @@ class SLAReporter:
             .success {color: green;}
         </style>"""
 
+    default_html = """<!DOCTYPE html> 
+        <html>
+            <head>
+                <meta charset="utf-8">
+                <title>${title}</title>
+                <style>
+                    ${style}
+                </style>
+            </head>
+            <body>
+                <h2>${title}</h2>
+                ${table}
+                <p>${footer}</p>
+            </body>
+        </html>"""
+
     def __init__(self, config: dict):
         """
         Instantiate a SLAReporter object
@@ -55,6 +71,12 @@ class SLAReporter:
             self.css = self.config['css']
         except KeyError:
             self.css = self.default_css
+
+        # Setup HTML
+        try:
+            self.html = self.config['html']
+        except KeyError:
+            self.html = self.default_html
 
     def get_cluster_ids(self, search_query: str) -> Dict[str, str]:
         """
@@ -102,10 +124,10 @@ class SLAReporter:
                         query_res[0]["value"][1]) * 100
                 except Exception as ex:
                     raw_report[cluster_name][rule['name']]['sli'] = None
-                    logging.warning(
+                    logger.warning(
                         "Failed to resolve '{}' for cluster '{}': {}".format(rule['name'],
                                                                              cluster_name, str(ex)))
-                    logging.info("Full exception: " + repr(ex))
+                    logger.info("Full exception: " + repr(ex))
         return raw_report
 
     def generate_headers(self) -> List[str]:
@@ -118,17 +140,19 @@ class SLAReporter:
             sum([(r["name"] + " Goal", r["name"] + " Perf.") for r in self.config["rules"]], (), ))
 
     def format_report(self, headers: List[str], raw_report: Dict[str, Dict[str, Dict[str, float]]],
-                      fmt: str, color: bool) -> str:
+                      fmt: str, color: bool, title: str = None, footer: str = None) -> str:
         """
         Format a pre-generated report using tabulate and print to string
 
-        Basically, this wraps around tabulate, but does the work of adding
-        CSS styles for you. Optionally, you can provide your own CSS style
+        Basically, this function adds to the capabilities of tabulate by
+        adding colors and HTML styling (if fmt='html')
 
         :param headers: (list) the header row of the report
         :param raw_report: (dict) the contents of the report
         :param fmt: (str) passed to tabulate as the "tablefmt" param
         :param color: (bool) whether or not to include color styles
+        :param title: (str) optional title to display on the report
+        :param footer: (str) optional footer to display on the report
         """
         table = []
         for cluster_name, rules in raw_report.items():
@@ -148,9 +172,12 @@ class SLAReporter:
             formatted_report = str_buff.getvalue()
             str_buff.close()
             return formatted_report
+        elif fmt == 'html':
+            table_html = tabulate(table, headers, tablefmt=fmt, stralign="center")
+            return Template(self.html).safe_substitute(style=self.css, table=table_html,
+                                                       title=title, footer=footer)
         else:
-            css = self.css if fmt == "html" else ""
-            return css + tabulate(table, headers, tablefmt=fmt, stralign="center")
+            return tabulate(table, headers, tablefmt=fmt, stralign="center")
 
     @staticmethod
     def __check_ssl_certs(url: str) -> bool:
@@ -196,8 +223,9 @@ class SLAReporter:
         :returns: (str) a formatted HTML string
         """
         if value is None:
-            html_template = "-"
-            shell_template = "-"
+            value = 0
+            html_template = "--"
+            shell_template = "--"
         elif color:
             if value - goal < 0:
                 html_template = "<span class='danger'>{}&#37;</span>"

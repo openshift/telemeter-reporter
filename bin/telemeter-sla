@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
+import datetime
 import logging
 import os.path
 import signal
 import sys
+import time
 import urllib.parse
 import webbrowser
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
@@ -39,6 +41,7 @@ arg_parser.add_argument("-f", "--format", default="simple", metavar="FMT", choic
                         help="Format for the report. Options: {}".format(str(format_choices)))
 arg_parser.add_argument("-u", "--uhc-query", metavar='QUERY',
                         help="Report on all clusters returned by this query to the UHC API")
+arg_parser.add_argument("-t", "--title", metavar='TITLE', help="Optional title for HTML reports")
 arg_parser.add_argument("-b", "--no-browser", action="store_true",
                         help="Don't open the resulting report in a web browser (if HTML report is "
                              "selected)")
@@ -55,6 +58,7 @@ with open(os.path.expanduser(args.config), 'r') as f:
     config = yaml.safe_load(f)
 
 # Create SLAReporter instance
+elapsed = time.perf_counter()
 slar = SLAReporter(config)
 
 # Get Cluster external_ids
@@ -67,15 +71,25 @@ else:
 
 # Do the actual queries (this may take a while...)
 raw_report = slar.generate_report(cluster_ids)
+elapsed = time.perf_counter() - elapsed
 
 # Format the report
 if args.format == "html":
-    # For HTML reports, we force color on and inject some additional CSS
+    # For HTML reports, we force color on add a title
+    if args.title:
+        title = args.title
+    else:
+        try:
+            today = datetime.date.today()
+            start = today - datetime.timedelta(days=int(config['global_vars']['duration']))
+            title = "SLI Report: {} to {} ".format(start.isoformat(), today.isoformat())
+        except KeyError:
+            title = "SLI Report"
+    footer = "Report generated {} UTC in {:.2f} sec".format(
+        datetime.datetime.utcnow().strftime("%F %T"), elapsed)
     headers = slar.generate_headers()
     formatted_report = slar.format_report(headers=headers, raw_report=raw_report, fmt=args.format,
-                                          color=True).replace("<table>", "<table class='pure-table "
-                                                                         "pure-table-striped "
-                                                                         "pure-table-horizontal'>")
+                                          color=True, title=title, footer=footer)
 elif args.format == "csv":
     # For CSV reports, we provide essentially raw data: no rounding, no percent signs, no color
     headers = slar.generate_headers()

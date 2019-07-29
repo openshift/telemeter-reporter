@@ -1,2 +1,2 @@
 from .uhc import UnifiedHybridClient
-from .reporter import SLAReporter
+from .reporter import SLIReporter

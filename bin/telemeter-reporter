@@ -11,11 +11,7 @@ from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
 import yaml
 
-# print('Python %s on %s' % (sys.version, sys.platform))
-# TODO REMOVE PATH EXTEND!
-sys.path.extend(['/home/abyrne/Documents/telemeter-sla-reporter'])
-
-from telemeter_sla_reporter import SLAReporter
+from telemeter_reporter import SLIReporter
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +30,7 @@ arg_parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter,
                                         "Telemeter-LTS data", )
 
 arg_parser.add_argument("-c", "--config", help="Path to YAML file containing configuration data",
-                        default="~/.telemeter_sla_reporter.yml", metavar="PATH")
+                        default="~/.telemeter_reporter.yml", metavar="PATH")
 arg_parser.add_argument("output", help="Path to where to save the generated report (- = stdout)")
 format_choices = ['simple', 'plain', 'html', 'csv', 'grid', 'fancy_grid', 'github', 'jira', 'latex']
 arg_parser.add_argument("-f", "--format", default="simple", metavar="FMT", choices=format_choices,
@@ -57,9 +53,9 @@ logging.basicConfig(level=args.log.upper())
 with open(os.path.expanduser(args.config), 'r') as f:
     config = yaml.safe_load(f)
 
-# Create SLAReporter instance
+# Create SLIReporter instance
 elapsed = time.perf_counter()
-slar = SLAReporter(config)
+slar = SLIReporter(config)
 
 # Get Cluster external_ids
 if args.uhc_query:

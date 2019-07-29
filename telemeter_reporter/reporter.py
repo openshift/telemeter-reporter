@@ -12,13 +12,12 @@ from tabulate import tabulate
 
 from .uhc import UnifiedHybridClient
 
-logger = logging.getLogger(__name__)
 
-
-class SLAReporter:
+class SLIReporter:
     """
-    Generate formatted reports on SLA compliance
+    Generate formatted reports on SLI performance
     """
+    logger = logging.getLogger(__name__)
 
     caution_threshold = 0.01
     default_css = """<style>
@@ -45,7 +44,7 @@ class SLAReporter:
 
     def __init__(self, config: dict):
         """
-        Instantiate a SLAReporter object
+        Instantiate a SLIReporter object
 
         :param config: (dict) the "settings" for this class, including URLs
             and rules. Usually originates from a YAML file.
@@ -54,17 +53,17 @@ class SLAReporter:
 
         # Connect to Telemeter-LTS
         if not self.__check_ssl_certs(self.config["api"]["telemeter"]["url"]):
-            logger.error("Couldn't securely connect to {}.")
+            self.logger.error("Couldn't securely connect to {}.")
             raise Exception("Can't connect to Telemeter-LTS")
         self.pc = prometheus_api_client.prometheus_connect.PrometheusConnect(
             url=self.config["api"]["telemeter"]["url"],
             headers={"Authorization": "bearer " + self.config["api"]["telemeter"]["token"]},
             disable_ssl=False, )
-        logger.info("Connected to Telemeter-LTS")
+        self.logger.info("Connected to Telemeter-LTS")
 
         # Connect to UHC
         self.uhc = UnifiedHybridClient(config["api"]["uhc"]["url"], config["api"]["uhc"]["token"])
-        logger.info("Connected to UHC API")
+        self.logger.info("Connected to UHC API")
 
         # Setup CSS
         try:
@@ -114,20 +113,21 @@ class SLAReporter:
                                     **{"sel": selector}, }
                 query = Template(rule["query"]).substitute(**query_params)
                 raw_report[cluster_name][rule['name']]['goal'] = float(rule['goal']) * 100
-                logger.info("Resolving '{}' for cluster '{}'...".format(rule['name'], cluster_name))
+                self.logger.info(
+                    "Resolving '{}' for cluster '{}'...".format(rule['name'], cluster_name))
                 # noinspection PyBroadException
                 try:
-                    logger.debug("REQUEST: " + query)
+                    self.logger.debug("REQUEST: " + query)
                     query_res = self.pc.custom_query(query)
-                    logger.debug("RESPONSE: " + str(query_res))
+                    self.logger.debug("RESPONSE: " + str(query_res))
                     raw_report[cluster_name][rule['name']]['sli'] = float(
                         query_res[0]["value"][1]) * 100
                 except Exception as ex:
                     raw_report[cluster_name][rule['name']]['sli'] = None
-                    logger.warning(
+                    self.logger.warning(
                         "Failed to resolve '{}' for cluster '{}': {}".format(rule['name'],
                                                                              cluster_name, str(ex)))
-                    logger.info("Full exception: " + repr(ex))
+                    self.logger.info("Full exception: " + repr(ex))
         return raw_report
 
     def generate_headers(self) -> List[str]:
@@ -179,8 +179,8 @@ class SLAReporter:
         else:
             return tabulate(table, headers, tablefmt=fmt, stralign="center")
 
-    @staticmethod
-    def __check_ssl_certs(url: str) -> bool:
+    @classmethod
+    def __check_ssl_certs(cls, url: str) -> bool:
         """
         Checks if the Red Hat SSL CA certs are installed by connecting
         to a URL that uses them.
@@ -188,23 +188,26 @@ class SLAReporter:
         :param url: (str) an HTTPS URL utilizing Red Hat-signed certificates
         :returns: (bool) true if we could successfully connect to the URL
         """
-        logger.debug("Attempting secure connection to " + url)
+        cls.logger.debug("Attempting secure connection to " + url)
         retries = 3
         success = False
         while not success and retries > 0:
             retries -= 1
             try:
                 response = requests.get(url)
-                logger.debug("Received status code " + str(response.status_code))
+                cls.logger.debug("Received status code " + str(response.status_code))
                 success = True
             except requests.exceptions.SSLError:
-                logger.warning("SSL certificate error. {} retries left".format(retries))
+                cls.logger.warning("SSL certificate error. {} retries left".format(retries))
                 ca_file = certifi.where()
-                with open("RHCertBundle.pem", "rb") as infile:
-                    custom_ca = infile.read()
-                with open(ca_file, "ab") as outfile:
-                    outfile.write(custom_ca)
-                    logger.info("Added Red Hat CA to certificate store")
+                try:
+                    with open("RHCertBundle.pem", "rb") as infile:
+                        custom_ca = infile.read()
+                    with open(ca_file, "ab") as outfile:
+                        outfile.write(custom_ca)
+                        cls.logger.info("Added Red Hat CA to certificate store")
+                except FileNotFoundError:
+                    cls.logger.warning("No RHCertBundle.pem found".format(retries))
 
         return success
 

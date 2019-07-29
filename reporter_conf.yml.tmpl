@@ -1,0 +1,161 @@
+---
+css: |
+  *{font-family:Sans-serif}
+  table{border-collapse:collapse;border-spacing:0;empty-cells:show;border:1px solid #cbcbcb}
+  td,th{font-size:inherit;margin:0;overflow:visible;padding:.5em 1em;border-bottom:1px solid #cbcbcb}
+  thead{background-color:#e0e0e0;color:#000;text-align:left;vertical-align:bottom}
+  td{background-color:transparent}
+  tr:nth-child(2n-1) td{background-color:#f2f2f2}
+  tbody>tr:last-child>td{border-bottom-width:0}
+  .danger{color:red;font-weight:700}
+  .caution{color:#ff8c00;font-weight:700}
+  .success{color:green}
+api:
+  telemeter:
+    url: "[INSERT PROMETHEUS API URL HERE]"
+    token: "[INSERT TOKEN HERE]"
+  uhc:
+    url: "https://api.openshift.com"
+    # The Red Hat public key is below, but you can extract your own from a known-safe login token using https://jwt.io/
+    public_key: |
+      -----BEGIN PUBLIC KEY-----
+      MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAuYp35gi5YzQeNN5aQOPw
+      LranSJT9aJB+w6Ih4Wn9R6FzEg1OEKwBNNpb+z18reAyhxQMy/bCz3q+J7viX6p5
+      hbclPBakKOjPB4lDzwhvfE1G4vp84zH1bR7m8dd4OXbriojVZ51IPNuItO00nrDr
+      x6PWNP/5ufBUwjJo8+BD+sWm7BP/CVlb8miVh8itpcLJrszpHzF+u0OPqwI/e3P8
+      3cYOsXoQRxD4wpo718yqYh4J3NNJQYnyprJMpC3w3QQ5PR28TbBfSHgvtWD1SBua
+      vHh2jwT/6Pi8FqOS1vfX7QA1pxyYZ+zazVxj/zOrCeP3FHyaxTPmn0d5zsXBZCCy
+      hsfCaStnFePTPk+KEGwZAlv43JJjV2rTJc1Lsj1Th7Jq63TvwIGBcFFAtC72N5+j
+      wRjUoeyu/nwO/1r1awvbfrlBF31PG5wxUdVR56PesLO7EVH1/2KrVN7dtgaQkomV
+      k6rULBbCbwhfR1oT3cOxF7d0ajpbzHd2qcfeBzFTABL8dzBp4FcZx5QyYSIOP8fu
+      wSO8zy4rxmBw7HpHGOGFrC3cXWqB33M23IjOpVZbfK46QvJhcGq9QEtOlRO2WVem
+      McwDSgpceAa7e3ZJx+LO6XyTEjRtTuHMwdLxII3YUlL1hPozrNE1U/ADPGHgnTxG
+      swgBpGOA6rOkWav5uhcj9CsCAwEAAQ==
+      -----END PUBLIC KEY-----
+    token: "[INSERT TOKEN HERE]"
+clusters:
+  - "managed = 't'"
+global_vars:
+  duration: 7
+rules:
+  - name: "CtrlPlane General"
+    goal: 0.995
+    query: |
+        clamp_max(
+          sum_over_time(
+            (clamp_max(
+              sum without (alertstate, severity) (
+                absent(alerts{
+                  severity='critical',
+                  alertstate='firing',
+                  namespace=~'(default|kube.*|openshift.*)',
+                  alertname=~'(KubeAPIDown|KubeControllerManagerDown|KubeSchedulerDown|KubeletDown|KubeAPILatencyHigh)',
+                  ${sel}
+                })
+              ),1
+            ))[${duration}d:1m]
+          ) / (${duration} * 24 * 60) > 0, 1
+        )
+  - name: "CtrlPlane API"
+    goal: 0.999
+    query: |
+      (
+        (
+          sum(sum_over_time(code:apiserver_request_count:rate:sum{${sel}}[${duration}d])) -
+          sum(sum_over_time(code:apiserver_request_count:rate:sum{code=~'5.*',${sel}}[${duration}d]))
+        ) / sum(sum_over_time(code:apiserver_request_count:rate:sum{${sel}}[${duration}d]))
+      ) OR (absent(code:apiserver_request_count:rate:sum{code=~'5.*',${sel}} == 0))
+  - name: "CtrlPlane etcd"
+    goal: 0.999
+    duration: 7
+    query: |
+      clamp_max(
+        sum_over_time(
+          (
+            sum(up{service='etcd',${sel}}) > bool 0
+          )[${duration}d:1m]
+        ) / (${duration} * 24 * 60) > 0, 1
+      )
+  - name: "CtrlPlane Latency"
+    goal: 0.995
+    query: |
+        clamp_max(
+          sum_over_time(
+            (clamp_max(
+              sum without (alertstate, severity) (
+                absent(alerts{
+                  severity='critical',
+                  alertstate='firing',
+                  namespace=~'(default|kube.*|openshift.*)',
+                  alertname=~'(KubeAPILatencyHigh)',
+                  ${sel}
+                })
+              ),1
+            ))[${duration}d:1m]
+          ) / (${duration} * 24 * 60) > 0, 1
+        )
+  - name: "Registry General"
+    goal: 0.99
+    query: |
+      clamp_max(
+        sum_over_time(
+          (
+            sum(up{service='image-registry',${sel}}) > bool 0
+          )[${duration}d:1m]
+        ) / (${duration} * 24 * 60) > 0, 1
+      )
+  - name: "Compute General"
+    goal: 0.995
+    query: |
+        clamp_max(
+          sum_over_time(
+            (clamp_max(
+              sum without (alertstate, severity) (
+                absent(alerts{
+                  severity='critical',
+                  alertstate='firing',
+                  namespace=~'(default|kube.*|openshift.*)',
+                  alertname=~'(KubeClientCertificateExpiration|KubePodCrashLooping|KubePodNotReady|KubePersistentVolumeUsageCritical)',
+                  ${sel}
+                })
+              ),1
+            ))[${duration}d:1m]
+          ) / (${duration} * 24 * 60) > 0, 1
+        )
+  - name: "Compute Resiliency"
+    goal: 0.99
+    query: |
+        clamp_max(
+          sum_over_time(
+            (clamp_max(
+              sum without (alertstate, severity) (
+                absent(alerts{
+                  severity='critical',
+                  alertstate='firing',
+                  namespace=~'(default|kube.*|openshift.*)',
+                  alertname=~'(.*Mismatch|.*Stuck)',
+                  ${sel}
+                })
+              ),1
+            ))[${duration}d:1m]
+          ) / (${duration} * 24 * 60) > 0, 1
+        )
+  - name: "Support Monitoring"
+    goal: 0.9999
+    query: |
+        clamp_max(
+          sum_over_time(
+            (clamp_max(
+              sum without (alertstate, severity) (
+                absent(alerts{
+                  severity='critical',
+                  alertstate='firing',
+                  namespace=~'(default|kube.*|openshift.*)',
+                  alertname=~'(ClusterMonitoringOperator.*|KubeStateMetricsDown|Prometheus.*Down)',
+                  ${sel}
+                })
+              ),1
+            ))[${duration}d:1m]
+          ) / (${duration} * 24 * 60) > 0, 1
+        )
+...

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import ast
 import datetime
 import logging
 import os.path
@@ -44,6 +45,9 @@ arg_parser.add_argument("-b", "--no-browser", action="store_true",
 log_choices = ['critical', 'error', 'warning', 'info', 'debug']
 arg_parser.add_argument("-l", "--log", default='warning', metavar='LEVEL', choices=log_choices,
                         help="Set the verbosity/logging level. Options: {}".format(log_choices))
+arg_parser.add_argument("-o", "--override", metavar='VARS',
+                        help="Override global variables set in the configuration file. Provide a "
+                             "valid Python dict string, e.g. \"{'duration': 28}\"")
 args = arg_parser.parse_args()
 
 # Set logging level
@@ -53,20 +57,27 @@ logging.basicConfig(level=args.log.upper())
 with open(os.path.expanduser(args.config), 'r') as f:
     config = yaml.safe_load(f)
 
+# Override global vars
+if args.override:
+    try:
+        config['global_vars'].update(ast.literal_eval(args.override))
+    except AttributeError:
+        config['global_vars'] = ast.literal_eval(args.override)
+
 # Create SLIReporter instance
 elapsed = time.perf_counter()
-slar = SLIReporter(config)
+sli_rep = SLIReporter(config)
 
 # Get Cluster external_ids
 if args.uhc_query:
-    cluster_ids = slar.get_cluster_ids(args.uhc_query)
+    cluster_ids = sli_rep.get_cluster_ids(args.uhc_query)
 else:
     cluster_ids = {}
     for uhc_query in config['clusters']:
-        cluster_ids.update(slar.get_cluster_ids(uhc_query))
+        cluster_ids.update(sli_rep.get_cluster_ids(uhc_query))
 
 # Do the actual queries (this may take a while...)
-raw_report = slar.generate_report(cluster_ids)
+raw_report = sli_rep.generate_report(cluster_ids)
 elapsed = time.perf_counter() - elapsed
 
 # Format the report
@@ -83,20 +94,21 @@ if args.format == "html":
             title = "SLI Report"
     footer = "Report generated {} UTC in {:.2f} sec".format(
         datetime.datetime.utcnow().strftime("%F %T"), elapsed)
-    headers = slar.generate_headers()
-    formatted_report = slar.format_report(headers=headers, raw_report=raw_report, fmt=args.format,
-                                          color=True, title=title, footer=footer)
+    headers = sli_rep.generate_headers()
+    formatted_report = sli_rep.format_report(headers=headers, raw_report=raw_report,
+                                             fmt=args.format, color=True, title=title,
+                                             footer=footer)
 elif args.format == "csv":
     # For CSV reports, we provide essentially raw data: no rounding, no percent signs, no color
-    headers = slar.generate_headers()
-    formatted_report = slar.format_report(headers=headers, raw_report=raw_report, fmt=args.format,
-                                          color=False)
+    headers = sli_rep.generate_headers()
+    formatted_report = sli_rep.format_report(headers=headers, raw_report=raw_report,
+                                             fmt=args.format, color=False)
 else:
     # For all other formats, we break every header row at each space to reduce width, and only
     # enable color if we're printing to stdout
-    headers = [x.replace(' ', '\n') for x in slar.generate_headers()]
-    formatted_report = slar.format_report(headers=headers, raw_report=raw_report, fmt=args.format,
-                                          color=(args.output == '-'))
+    headers = [x.replace(' ', '\n') for x in sli_rep.generate_headers()]
+    formatted_report = sli_rep.format_report(headers=headers, raw_report=raw_report,
+                                             fmt=args.format, color=(args.output == '-'))
 
 # Output report
 if args.output == '-':

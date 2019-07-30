@@ -13,11 +13,11 @@ from tabulate import tabulate
 from .uhc import UnifiedHybridClient
 
 
-class SLIReporter:
+class SLIReporter(object):
     """
     Generate formatted reports on SLI performance
     """
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger("SLIReporter")
 
     caution_threshold = 0.01
     default_css = """<style>
@@ -53,7 +53,8 @@ class SLIReporter:
 
         # Connect to Telemeter-LTS
         if not self.__check_ssl_certs(self.config["api"]["telemeter"]["url"]):
-            self.logger.error("Couldn't securely connect to {}.")
+            self.logger.error(
+                "Couldn't securely connect to {}.".format(self.config["api"]["telemeter"]["url"]))
             raise Exception("Can't connect to Telemeter-LTS")
         self.pc = prometheus_api_client.prometheus_connect.PrometheusConnect(
             url=self.config["api"]["telemeter"]["url"],
@@ -189,7 +190,7 @@ class SLIReporter:
         :returns: (bool) true if we could successfully connect to the URL
         """
         cls.logger.debug("Attempting secure connection to " + url)
-        retries = 3
+        retries = 2
         success = False
         while not success and retries > 0:
             retries -= 1
@@ -207,7 +208,10 @@ class SLIReporter:
                         outfile.write(custom_ca)
                         cls.logger.info("Added Red Hat CA to certificate store")
                 except FileNotFoundError:
-                    cls.logger.warning("No RHCertBundle.pem found".format(retries))
+                    cls.logger.warning("No RHCertBundle.pem found. Please add the Red Hat CA "
+                                       "certificate to your system's certificate store, or place "
+                                       "a certificate bundle file named 'RHCertBundle.pem' in the "
+                                       "working directory and try again.")
 
         return success
 

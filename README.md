@@ -34,7 +34,7 @@ you should provide a `duration` variable (in days) here.
 ```
 $ telemeter-reporter -h
 usage: telemeter-reporter [-h] [-c PATH] [-f FMT] [-u QUERY] [-t TITLE] [-b]
-                          [-l QUERY]
+                          [-l LEVEL] [-o VARS]
                           output
 
 Tool for generating reports on SLA/SLO compliance using Telemeter-LTS data
@@ -62,5 +62,10 @@ optional arguments:
                         Set the verbosity/logging level. Options: ['critical',
                         'error', 'warning', 'info', 'debug'] (default:
                         warning)
+  -o VARS, --override VARS
+                        Override global variables set in the configuration
+                        file. Provide a valid Python dict string, e.g.
+                        "{'duration': 28}" (default: None)
+
 ```
 Note: the `-u` parameter overrides any `clusters` list provided in a config file.

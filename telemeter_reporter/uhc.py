@@ -4,13 +4,12 @@ import logging
 import jwt
 import requests
 
-logger = logging.getLogger(__name__)
 
-
-class UnifiedHybridClient:
+class UnifiedHybridClient(object):
     """
     Limited access to the UHC API for authentication and cluster searching
     """
+    logger = logging.getLogger("UnifiedHybridClient")
 
     def __init__(self, api_url: str, offline_token: str, public_key: str = None):
         """
@@ -30,6 +29,10 @@ class UnifiedHybridClient:
         self.public_key = public_key.strip() if public_key is not None else public_key
 
         # Extract info from the offline token
+        if self.public_key is not None:
+            self.logger.warning(
+                "Unable to validate provided UHC offline_access token. Provide a value for "
+                "api:uhc:public_key in the config file to enable validation")
         ot_decoded = jwt.decode(self.offline_token, self.public_key, algorithms="RS256",
                                 verify=(self.public_key is not None), )
         self.iss_url = ot_decoded["iss"]
@@ -46,7 +49,12 @@ class UnifiedHybridClient:
                                        "client_id":     self.client_id,
                                        "refresh_token": self.offline_token, },
                                  headers={"accept": "application/json"}, )
-        return response.json()["access_token"]
+        try:
+            return response.json()["access_token"]
+        except KeyError:
+            self.logger.critical(
+                "Unable to obtain OpenID access token from {}. Response: {}".format(self.iss_url,
+                                                                                    str(response)))
 
     def search_clusters(self, query: str) -> dict:
         """
@@ -58,12 +66,14 @@ class UnifiedHybridClient:
             cluster instead of the names of the columns of a table.
         :returns: (dict) the response from the API in dict format
         """
+        self.logger.info("Querying UHC API for clusters matching \"{}\"".format(query))
         response = requests.get("{}/api/clusters_mgmt/v1/clusters".format(self.api_url),
-                                verify=True, headers={"accept":        "application/json",
-                                                      "Authorization": "Bearer " + self.__get_access_token(), },
-                                params={"search": query}, )
+                                headers={"accept":        "application/json",
+                                         "Authorization": "Bearer " + self.__get_access_token(), },
+                                params={"search": query}, verify=True, )
         if response.status_code == 200:
             data = response.json()
+            self.logger.info("UHC API returned {} clusters".format(len(data['items'])))
         else:
             raise Exception(
                 "HTTP Status Code {} ({})".format(response.status_code, response.content))

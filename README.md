@@ -58,8 +58,9 @@ optional arguments:
                         Optional title for HTML reports (default: None)
   -b, --no-browser      Don't open the resulting report in a web browser (if
                         HTML report is selected) (default: False)
-  -l QUERY, --log QUERY
-                        Set the verbosity/logging level. Options ['critical',
+  -l LEVEL, --log LEVEL
+                        Set the verbosity/logging level. Options: ['critical',
                         'error', 'warning', 'info', 'debug'] (default:
                         warning)
 ```
+Note: the `-u` parameter overrides any `clusters` list provided in a config file.

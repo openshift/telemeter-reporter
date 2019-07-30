@@ -42,8 +42,8 @@ arg_parser.add_argument("-b", "--no-browser", action="store_true",
                         help="Don't open the resulting report in a web browser (if HTML report is "
                              "selected)")
 log_choices = ['critical', 'error', 'warning', 'info', 'debug']
-arg_parser.add_argument("-l", "--log", default='warning', metavar='QUERY', choices=log_choices,
-                        help="Set the verbosity/logging level. Options {}".format(log_choices))
+arg_parser.add_argument("-l", "--log", default='warning', metavar='LEVEL', choices=log_choices,
+                        help="Set the verbosity/logging level. Options: {}".format(log_choices))
 args = arg_parser.parse_args()
 
 # Set logging level

@@ -2,7 +2,7 @@
 import ast
 import datetime
 import logging
-import os.path
+import os
 import signal
 import sys
 import time
@@ -14,7 +14,7 @@ import yaml
 
 from telemeter_reporter import SLIReporter
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("telemeter-reporter")
 
 
 # Handle Ctrl-C
@@ -54,7 +54,15 @@ args = arg_parser.parse_args()
 logging.basicConfig(level=args.log.upper())
 
 # Load config file
-with open(os.path.expanduser(args.config), 'r') as f:
+if os.getenv('TELEMETER_REPORTER_CONFIG'):
+    config_path = os.path.expanduser(os.getenv('TELEMETER_REPORTER_CONFIG'))
+    logger.info(
+        "Loading config from {} (set via TELEMETER_REPORTER_CONFIG env-var)".format(config_path))
+else:
+    config_path = os.path.expanduser(args.config)
+    logger.info("Loading config from {}".format(config_path))
+
+with open(config_path, 'r') as f:
     config = yaml.safe_load(f)
 
 # Override global vars
@@ -63,6 +71,12 @@ if args.override:
         config['global_vars'].update(ast.literal_eval(args.override))
     except AttributeError:
         config['global_vars'] = ast.literal_eval(args.override)
+
+# Override environmental vars for secrets
+if os.getenv('TELEMETER_TOKEN'):
+    config['api']['telemeter']['token'] = os.getenv('TELEMETER_TOKEN')
+if os.getenv('UHC_TOKEN'):
+    config['api']['uhc']['token'] = os.getenv('UHC_TOKEN')
 
 # Create SLIReporter instance
 elapsed = time.perf_counter()

@@ -2,6 +2,7 @@
 import csv
 import io
 import logging
+import os
 from string import Template
 from typing import Dict, List, Union
 
@@ -201,6 +202,15 @@ class SLIReporter(object):
             except requests.exceptions.SSLError:
                 cls.logger.warning("SSL certificate error. {} retries left".format(retries))
                 ca_file = certifi.where()
+                # Load config file
+                if os.getenv('TELEMETER_SSL_CA'):
+                    new_ca_path = os.path.expanduser(os.getenv('TELEMETER_SSL_CA'))
+                    cls.logger.info(
+                        "Loading SSL CA from {} (set via TELEMETER_SSL_CA env-var)".format(
+                            new_ca_path))
+                else:
+                    new_ca_path = "RHCertBundle.pem"
+
                 try:
                     with open("RHCertBundle.pem", "rb") as infile:
                         custom_ca = infile.read()

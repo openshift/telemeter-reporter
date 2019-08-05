@@ -212,7 +212,7 @@ class SLIReporter(object):
                     new_ca_path = "RHCertBundle.pem"
 
                 try:
-                    with open("RHCertBundle.pem", "rb") as infile:
+                    with open(new_ca_path, "rb") as infile:
                         custom_ca = infile.read()
                     with open(ca_file, "ab") as outfile:
                         outfile.write(custom_ca)

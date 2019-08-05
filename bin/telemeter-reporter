@@ -3,6 +3,7 @@ import ast
 import datetime
 import logging
 import os
+import pathlib
 import signal
 import sys
 import time
@@ -34,14 +35,22 @@ arg_parser.add_argument("-c", "--config", help="Path to YAML file containing con
                         default="~/.telemeter_reporter.yml", metavar="PATH")
 arg_parser.add_argument("output", help="Path to where to save the generated report (- = stdout)")
 format_choices = ['simple', 'plain', 'html', 'csv', 'grid', 'fancy_grid', 'github', 'jira', 'latex']
-arg_parser.add_argument("-f", "--format", default="simple", metavar="FMT", choices=format_choices,
-                        help="Format for the report. Options: {}".format(str(format_choices)))
+arg_parser.add_argument("-f", "--format", default=None, metavar="FMT", choices=format_choices,
+                        help="Format for the report. Can be provided multiple times (see --auto-ext"
+                             "). Options: {}".format(str(format_choices)), action='append')
 arg_parser.add_argument("-u", "--uhc-query", metavar='QUERY',
                         help="Report on all clusters returned by this query to the UHC API")
 arg_parser.add_argument("-t", "--title", metavar='TITLE', help="Optional title for HTML reports")
 arg_parser.add_argument("-b", "--no-browser", action="store_true",
                         help="Don't open the resulting report in a web browser (if HTML report is "
                              "selected)")
+arg_parser.add_argument("-a", "--auto-ext", action="store_true",
+                        help="Automatically append a file extension onto the provided output "
+                             "path. Enabled by default when --format is used multiple times. Has "
+                             "no effect when output = stdout.")
+arg_parser.add_argument("-p", "--parents", action="store_true",
+                        help="Same behavior as mkdir's --parents option. Creates parent "
+                             "directories in the output path if necessary.")
 log_choices = ['critical', 'error', 'warning', 'info', 'debug']
 arg_parser.add_argument("-l", "--log", default='warning', metavar='LEVEL', choices=log_choices,
                         help="Set the verbosity/logging level. Options: {}".format(log_choices))
@@ -78,6 +87,10 @@ if os.getenv('TELEMETER_TOKEN'):
 if os.getenv('UHC_TOKEN'):
     config['api']['uhc']['token'] = os.getenv('UHC_TOKEN')
 
+# Correct default format
+if args.format is None:
+    args.format = ['simple']
+
 # Create SLIReporter instance
 elapsed = time.perf_counter()
 sli_rep = SLIReporter(config)
@@ -95,41 +108,46 @@ raw_report = sli_rep.generate_report(cluster_ids)
 elapsed = time.perf_counter() - elapsed
 
 # Format the report
-if args.format == "html":
-    # For HTML reports, we force color on add a title
-    if args.title:
-        title = args.title
+for fmt in args.format:
+    if fmt == "html":
+        # For HTML reports, we force color on add a title
+        if args.title:
+            title = args.title
+        else:
+            try:
+                today = datetime.date.today()
+                start = today - datetime.timedelta(days=int(config['global_vars']['duration']))
+                title = "SLI Report: {} to {} ".format(start.isoformat(), today.isoformat())
+            except KeyError:
+                title = "SLI Report"
+        footer = "Report generated {} UTC in {:.2f} sec".format(
+            datetime.datetime.utcnow().strftime("%F %T"), elapsed)
+        headers = sli_rep.generate_headers()
+        formatted_report = sli_rep.format_report(headers=headers, raw_report=raw_report, fmt=fmt,
+                                                 color=True, title=title, footer=footer)
+    elif fmt == "csv":
+        # For CSV reports, we provide essentially raw data: no rounding, no percent signs, no color
+        headers = sli_rep.generate_headers()
+        formatted_report = sli_rep.format_report(headers=headers, raw_report=raw_report, fmt=fmt,
+                                                 color=False)
     else:
-        try:
-            today = datetime.date.today()
-            start = today - datetime.timedelta(days=int(config['global_vars']['duration']))
-            title = "SLI Report: {} to {} ".format(start.isoformat(), today.isoformat())
-        except KeyError:
-            title = "SLI Report"
-    footer = "Report generated {} UTC in {:.2f} sec".format(
-        datetime.datetime.utcnow().strftime("%F %T"), elapsed)
-    headers = sli_rep.generate_headers()
-    formatted_report = sli_rep.format_report(headers=headers, raw_report=raw_report,
-                                             fmt=args.format, color=True, title=title,
-                                             footer=footer)
-elif args.format == "csv":
-    # For CSV reports, we provide essentially raw data: no rounding, no percent signs, no color
-    headers = sli_rep.generate_headers()
-    formatted_report = sli_rep.format_report(headers=headers, raw_report=raw_report,
-                                             fmt=args.format, color=False)
-else:
-    # For all other formats, we break every header row at each space to reduce width, and only
-    # enable color if we're printing to stdout
-    headers = [x.replace(' ', '\n') for x in sli_rep.generate_headers()]
-    formatted_report = sli_rep.format_report(headers=headers, raw_report=raw_report,
-                                             fmt=args.format, color=(args.output == '-'))
+        # For all other formats, we break every header row at each space to reduce width, and only
+        # enable color if we're printing to stdout
+        headers = [x.replace(' ', '\n') for x in sli_rep.generate_headers()]
+        formatted_report = sli_rep.format_report(headers=headers, raw_report=raw_report, fmt=fmt,
+                                                 color=(args.output == '-'))
 
-# Output report
-if args.output == '-':
-    print(formatted_report)
-else:
-    save_path = os.path.abspath(os.path.expanduser(args.output))
-    with open(save_path, 'w') as f:
-        f.write(formatted_report)
-    if args.format == "html" and not args.no_browser:
-        webbrowser.open_new_tab("file://" + urllib.parse.quote(save_path))
+    # Output report
+    if args.output == '-':
+        print(formatted_report)
+    else:
+        save_path = os.path.abspath(os.path.expanduser(
+            "{}.{}".format(args.output, fmt) if args.auto_ext or len(
+                args.format) > 1 else args.output))
+        if args.parents:
+            pathlib.Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+
+        with open(save_path, 'w') as f:
+            f.write(formatted_report)
+        if fmt == "html" and not args.no_browser:
+            webbrowser.open_new_tab("file://" + urllib.parse.quote(save_path))

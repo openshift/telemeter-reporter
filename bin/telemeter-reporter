@@ -11,6 +11,7 @@ import urllib.parse
 import webbrowser
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
+import htmlmin
 import yaml
 
 from telemeter_reporter import SLIReporter
@@ -48,6 +49,7 @@ arg_parser.add_argument("-a", "--auto-ext", action="store_true",
                         help="Automatically append a file extension onto the provided output "
                              "path. Enabled by default when --format is used multiple times. Has "
                              "no effect when output = stdout.")
+arg_parser.add_argument("-m", "--minify", action="store_true", help="Minify HTML output")
 arg_parser.add_argument("-p", "--parents", action="store_true",
                         help="Same behavior as mkdir's --parents option. Creates parent "
                              "directories in the output path if necessary.")
@@ -136,6 +138,10 @@ for fmt in args.format:
         headers = [x.replace(' ', '\n') for x in sli_rep.generate_headers()]
         formatted_report = sli_rep.format_report(headers=headers, raw_report=raw_report, fmt=fmt,
                                                  color=(args.output == '-'))
+    # Minify HTML
+    if args.minify and fmt == "html":
+        formatted_report = htmlmin.minify(formatted_report, remove_comments=True,
+                                          remove_empty_space=True)
 
     # Output report
     if args.output == '-':

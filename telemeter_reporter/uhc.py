@@ -29,12 +29,13 @@ class UnifiedHybridClient(object):
         self.public_key = public_key.strip() if public_key is not None else public_key
 
         # Extract info from the offline token
-        if self.public_key is not None:
+        if self.public_key is None:
             self.logger.warning(
                 "Unable to validate provided UHC offline_access token. Provide a value for "
-                "api:uhc:public_key in the config file to enable validation")
+                "api.uhc.public_key in the config file to enable validation")
         ot_decoded = jwt.decode(self.offline_token, self.public_key, algorithms="RS256",
-                                verify=(self.public_key is not None), )
+                                verify=(self.public_key is not None), audience="cloud-services",
+                                options={'verify_exp': False})
         self.iss_url = ot_decoded["iss"]
         self.client_id = ot_decoded["aud"]
 

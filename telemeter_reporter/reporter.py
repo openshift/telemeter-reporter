@@ -64,8 +64,15 @@ class SLIReporter(object):
         self.logger.info("Connected to Telemeter-LTS")
 
         # Connect to UHC
-        self.uhc = UnifiedHybridClient(config["api"]["uhc"]["url"], config["api"]["uhc"]["token"])
-        self.logger.info("Connected to UHC API")
+        try:
+            self.uhc = UnifiedHybridClient(config["api"]["uhc"]["url"],
+                                           config["api"]["uhc"]["token"],
+                                           config["api"]["uhc"]["public_key"])
+            self.logger.info("Connected to UHC API")
+        except KeyError:
+            self.uhc = UnifiedHybridClient(config["api"]["uhc"]["url"],
+                                           config["api"]["uhc"]["token"])
+            self.logger.info("Connected to UHC API (unverified)")
 
         # Setup CSS
         try:

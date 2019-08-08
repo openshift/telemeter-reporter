@@ -9,7 +9,7 @@ import sys
 import time
 import urllib.parse
 import webbrowser
-from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
+from argparse import ArgumentParser
 
 import htmlmin
 import yaml
@@ -28,17 +28,18 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 # Handle command line args
-arg_parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter,
-                            description="Tool for generating reports on SLA/SLO compliance using "
+arg_parser = ArgumentParser(description="Tool for generating reports on SLA/SLO compliance using "
                                         "Telemeter-LTS data", )
 
-arg_parser.add_argument("-c", "--config", help="Path to YAML file containing configuration data",
-                        default="~/.telemeter_reporter.yml", metavar="PATH")
-arg_parser.add_argument("output", help="Path to where to save the generated report (- = stdout)")
+arg_parser.add_argument("-c", "--config",
+                        help="Path to YAML file containing configuration data. Default: "
+                             "~/.telemeter_reporter.yml", metavar="PATH")
+arg_parser.add_argument("output", help="Destination path for the generated report (- = stdout)")
 format_choices = ['simple', 'plain', 'html', 'csv', 'grid', 'fancy_grid', 'github', 'jira', 'latex']
 arg_parser.add_argument("-f", "--format", default=None, metavar="FMT", choices=format_choices,
                         help="Format for the report. Can be provided multiple times (see --auto-ext"
-                             "). Options: {}".format(str(format_choices)), action='append')
+                             "). Options: {}. Default: simple".format(str(format_choices)),
+                        action='append')
 arg_parser.add_argument("-u", "--uhc-query", metavar='QUERY',
                         help="Report on all clusters returned by this query to the UHC API")
 arg_parser.add_argument("-t", "--title", metavar='TITLE', help="Optional title for HTML reports")
@@ -64,14 +65,17 @@ args = arg_parser.parse_args()
 # Set logging level
 logging.basicConfig(level=args.log.upper())
 
-# Load config file
-if os.getenv('TELEMETER_REPORTER_CONFIG'):
+# Load config
+if args.config is not None:
+    config_path = os.path.expanduser(args.config)
+    logger.info("Loading config from {} (set via -c flag)".format(config_path))
+elif os.getenv('TELEMETER_REPORTER_CONFIG'):
     config_path = os.path.expanduser(os.getenv('TELEMETER_REPORTER_CONFIG'))
     logger.info(
         "Loading config from {} (set via TELEMETER_REPORTER_CONFIG env-var)".format(config_path))
 else:
-    config_path = os.path.expanduser(args.config)
-    logger.info("Loading config from {}".format(config_path))
+    config_path = os.path.expanduser("~/.telemeter_reporter.yml")
+    logger.info("Loading config from {} (by default)".format(config_path))
 
 with open(config_path, 'r') as f:
     config = yaml.safe_load(f)
@@ -132,9 +136,15 @@ for fmt in args.format:
         headers = sli_rep.generate_headers()
         formatted_report = sli_rep.format_report(headers=headers, raw_report=raw_report, fmt=fmt,
                                                  color=False)
+    elif fmt in ['github', 'jira', 'latex']:
+        # For other markup languages, we output the same data shown in the "simple" format, just
+        # just without any color or newlines added to the headers
+        headers = sli_rep.generate_headers()
+        formatted_report = sli_rep.format_report(headers=headers, raw_report=raw_report, fmt=fmt,
+                                                 color=False)
     else:
-        # For all other formats, we break every header row at each space to reduce width, and only
-        # enable color if we're printing to stdout
+        # For all other formats, we line-break every header row at each space to reduce width, and
+        # only enable color if we're printing to stdout
         headers = [x.replace(' ', '\n') for x in sli_rep.generate_headers()]
         formatted_report = sli_rep.format_report(headers=headers, raw_report=raw_report, fmt=fmt,
                                                  color=(args.output == '-'))

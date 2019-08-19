@@ -1,2 +1,3 @@
-# Marks code in the notebook folder as "vendored" so GitHub won't include it in the language statistics (otherwise we get marked as a Jupyter Notebook project)
+# Marks some code as "vendored" so GitHub won't include it in the language statistics (otherwise we get marked as a Jupyter Notebook project)
 notebook/* linguist-vendored
+.s2i/* linguist-vendored

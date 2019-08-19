@@ -128,7 +128,7 @@ for fmt in args.format:
                 title = "SLI Report"
         footer = "Report generated {} UTC in {:.2f} sec".format(
             datetime.datetime.utcnow().strftime("%F %T"), elapsed)
-        headers = sli_rep.generate_headers()
+        headers = sli_rep.generate_headers(html_tooltips=True)
         formatted_report = sli_rep.format_report(headers=headers, raw_report=raw_report, fmt=fmt,
                                                  color=True, title=title, footer=footer)
     elif fmt == "csv":

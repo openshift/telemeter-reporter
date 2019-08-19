@@ -10,6 +10,24 @@ css: |
   .danger{color:red;font-weight:700}
   .caution{color:#ff8c00;font-weight:700}
   .success{color:green}
+html: |
+  <!DOCTYPE html>
+  <html>
+      <head>
+          <meta charset="utf-8">
+          <title>${title}</title>
+          <p>This custom HTML template overrides the built-in template. Edit or remove the 'html' key in your config file to change this.</p>
+          <link rel="stylesheet" href="https://unpkg.com/balloon-css/balloon.min.css">
+          <style>
+              ${style}
+          </style>
+      </head>
+      <body>
+          <h2>${title}</h2>
+          ${table}
+          <p>${footer}</p>
+      </body>
+  </html>
 api:
   telemeter:
     url: "[INSERT PROMETHEUS API URL HERE]"
@@ -39,6 +57,7 @@ global_vars:
   duration: 7
 rules:
   - name: "CtrlPlane General"
+    description: "The proportion of time when no control plane errors are reported as measured from critical alerts in Prometheus."
     goal: 0.995
     query: |
         clamp_max(
@@ -57,6 +76,7 @@ rules:
           ) / (${duration} * 24 * 60) > 0, 1
         )
   - name: "CtrlPlane API"
+    description: "The proportion of successful (HTTP status < 500) responses to API requests as measured from Prometheus."
     goal: 0.999
     query: |
       (
@@ -66,8 +86,8 @@ rules:
         ) / sum(sum_over_time(code:apiserver_request_count:rate:sum{${sel}}[${duration}d]))
       ) OR (absent(code:apiserver_request_count:rate:sum{code=~'5.*',${sel}} == 0))
   - name: "CtrlPlane etcd"
+    description: "The proportion of time when at least one etcd pod reports as ready as measured by Prometheus."
     goal: 0.999
-    duration: 7
     query: |
       clamp_max(
         sum_over_time(
@@ -77,6 +97,7 @@ rules:
         ) / (${duration} * 24 * 60) > 0, 1
       )
   - name: "CtrlPlane Latency"
+    description: "The proportion of time when no critical KubeAPILatencyHigh alerts are reported in Prometheus."
     goal: 0.995
     query: |
         clamp_max(
@@ -95,6 +116,7 @@ rules:
           ) / (${duration} * 24 * 60) > 0, 1
         )
   - name: "Registry General"
+    description: "The proportion of successful responses to API requests to the registry as measured from Prometheus."
     goal: 0.99
     query: |
       clamp_max(
@@ -105,6 +127,7 @@ rules:
         ) / (${duration} * 24 * 60) > 0, 1
       )
   - name: "Compute General"
+    description: "The proportion of time when no compute errors are reported as measured from critical alerts in Prometheus."
     goal: 0.995
     query: |
         clamp_max(
@@ -123,6 +146,7 @@ rules:
           ) / (${duration} * 24 * 60) > 0, 1
         )
   - name: "Compute Resiliency"
+    description: "The proportion of time when no compute mismatches are reported as measured from critical alerts in Prometheus."
     goal: 0.99
     query: |
         clamp_max(
@@ -141,6 +165,7 @@ rules:
           ) / (${duration} * 24 * 60) > 0, 1
         )
   - name: "Support Monitoring"
+    description: "The proportion of time when monitoring is available measured by critical alerts for monitoring, metrics, and prometheus in Prometheus."
     goal: 0.9999
     query: |
         clamp_max(

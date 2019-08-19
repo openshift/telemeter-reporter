@@ -19,7 +19,11 @@ tool checks three locations (in order) for a config file:
 
 A sample config file is provided (`reporter_confg.yml.tmpl`). An explanation of each key is below. All keys are required
 unless otherwise noted.
-- `css`: provide a Cascading Style Sheet here to be injected into HTML-formatted reports.
+- `css`: provide a Cascading Style Sheet here to be injected into HTML-formatted reports (optional)
+- `html`: provide HTML here to override the built-in template. Any instances of `${title}`, `${style}`, `${table}`, or 
+`${footer}` will be replaced by (respectively) the report title, raw CSS (either the built-in stylesheet or the value of
+`css` from above), the HTML table displaying the results, or a footer showing when the report was generated and how long
+it took (optional)
 - `api.telemeter.url`: URL to any service providing a Prometheus-compatible API
 - `api.telemeter.token`: Log-in token for the Telemeter API (i.e. OAuth) **(can be left out if `TELEMETER_TOKEN` env-var is set)**
 - `api.uhc.url`: URL for the UHC HTTP API
@@ -33,8 +37,11 @@ example, providing `- foo: "bar"` here will replace any instance of `${foo}` in 
 you should provide a `duration` variable (in days) here **(can be overridden with the `--override` flag)**
 - `rules`: provide a list of SLI rules to evaluate (see below)
   - `rules.name`: a human-readable name for the rule
+  - `rules.description`: a human-readable description for the rule (optional, only shown in HTML tooltips)
   - `rules.goal`: the target-value for the query result. Usually a percentage represented as a float between 0 and 1.0
-  - `rules.query`: a valid PromQL query that returns the current value of the SLI (which will be compared to the goal)
+  - `rules.query`: a valid PromQL query that returns the current value of the SLI (which will be compared to the goal).
+Any instance of `${sel}` will be replaced with `_id=<cluster_id>`. You may also use global variables (see `global_vars`
+above)
 
  
 ### Command line tool

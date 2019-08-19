@@ -32,6 +32,7 @@ class SLIReporter(object):
             <head>
                 <meta charset="utf-8">
                 <title>${title}</title>
+                <link rel="stylesheet" href="https://unpkg.com/balloon-css/balloon.min.css">
                 <style>
                     ${style}
                 </style>
@@ -139,14 +140,28 @@ class SLIReporter(object):
                     self.logger.info("Full exception: " + repr(ex))
         return raw_report
 
-    def generate_headers(self) -> List[str]:
+    def generate_headers(self, html_tooltips: bool = False) -> List[str]:
         """
         Generate the header row of the report based on the configured rules
 
+        :param html_tooltips: (bool) if True, add HTML span tags to the output which enable CSS
+            description tooltips
         :returns: a single list representing the header row
         """
-        return ["Cluster"] + list(
-            sum([(r["name"] + " Goal", r["name"] + " Perf.") for r in self.config["rules"]], (), ))
+        if html_tooltips:
+            prefix = "<span data-balloon-length='large' data-balloon-pos='up' " \
+                     "aria-label='{desc}'>{name} {t}</span>"
+
+            head_gen = [(prefix.format(name=r['name'],
+                                       desc=(r['description'] if 'description' in r else "n/a"),
+                                       t="Goal"), prefix.format(name=r['name'], desc=(
+                r['description'] if 'description' in r else "n/a"), t="Perf.")) for r in
+                        self.config["rules"]]
+
+        else:
+            head_gen = [(r["name"] + " Goal", r["name"] + " Perf.") for r in self.config["rules"]]
+
+        return ["Cluster"] + list(sum(head_gen, (), ))
 
     def format_report(self, headers: List[str], raw_report: Dict[str, Dict[str, Dict[str, float]]],
                       fmt: str, color: bool, title: str = None, footer: str = None) -> str:

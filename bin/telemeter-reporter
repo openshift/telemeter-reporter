@@ -11,6 +11,7 @@ import urllib.parse
 import webbrowser
 from argparse import ArgumentParser
 
+import dateparser
 import htmlmin
 import yaml
 
@@ -43,6 +44,10 @@ arg_parser.add_argument("-f", "--format", default=None, metavar="FMT", choices=f
 arg_parser.add_argument("-u", "--uhc-query", metavar='QUERY',
                         help="Report on all clusters returned by this query to the UHC API")
 arg_parser.add_argument("-t", "--title", metavar='TITLE', help="Optional title for HTML reports")
+arg_parser.add_argument("-i", "--time", metavar='TIME',
+                        help="Generate a report at a certain point in the past. Strings like '2 "
+                             "weeks ago', 'last Monday', 'yesterday at 8pm', or 'October 1, 2018' "
+                             "are all acceptable")
 arg_parser.add_argument("-b", "--no-browser", action="store_true",
                         help="Don't open the resulting report in a web browser (if HTML report is "
                              "selected)")
@@ -109,8 +114,20 @@ else:
     for uhc_query in config['clusters']:
         cluster_ids.update(sli_rep.get_cluster_ids(uhc_query))
 
+# Parse time argument
+if args.time:
+    report_time = dateparser.parse(args.time)
+    if not report_time:
+        logger.fatal("Failed to parse time argument. Exiting...")
+        sys.exit(-3)
+else:
+    report_time = None
+
 # Do the actual queries (this may take a while...)
-raw_report = sli_rep.generate_report(cluster_ids)
+try:
+    raw_report = sli_rep.generate_report(cluster_ids, time=report_time.timestamp())
+except AttributeError:
+    raw_report = sli_rep.generate_report(cluster_ids)
 elapsed = time.perf_counter() - elapsed
 
 # Format the report
@@ -121,11 +138,11 @@ for fmt in args.format:
             title = args.title
         else:
             try:
-                today = datetime.date.today()
+                today = datetime.date.today() if not report_time else report_time.date()
                 start = today - datetime.timedelta(days=int(config['global_vars']['duration']))
-                title = "SLI Report: {} to {} ".format(start.isoformat(), today.isoformat())
+                title = "SLO Report: {} to {} ".format(start.isoformat(), today.isoformat())
             except KeyError:
-                title = "SLI Report"
+                title = "SLO Report"
         footer = "Report generated {} UTC in {:.2f} sec".format(
             datetime.datetime.utcnow().strftime("%F %T"), elapsed)
         headers = sli_rep.generate_headers(html_tooltips=True)

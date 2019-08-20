@@ -100,7 +100,7 @@ class SLIReporter(object):
         return {x["name"]: "_id='{}'".format(x["external_id"]) for x in cluster_list["items"] if
                 "external_id" in x.keys()}
 
-    def generate_report(self, cluster_ids: Dict[str, str]) -> Dict[
+    def generate_report(self, cluster_ids: Dict[str, str], time: int = None) -> Dict[
         str, Dict[str, Dict[str, float]]]:
         """
         Generate a raw SLA report by running each configured query
@@ -108,6 +108,8 @@ class SLIReporter(object):
 
         :param cluster_ids: (dict) a dict with selected cluster names as
             keys and their external_ids as values.
+        :param time: (int) if provided, tells Telemeter to query as if
+            it was sometime in the past. Provide a Unix timestamp here
         :returns: (dict) raw report data in a nested dictionary
         """
         raw_report = {}
@@ -124,11 +126,16 @@ class SLIReporter(object):
                 query = Template(rule["query"]).substitute(**query_params)
                 raw_report[cluster_name][rule['name']]['goal'] = float(rule['goal']) * 100
                 self.logger.info(
-                    "Resolving '{}' for cluster '{}'...".format(rule['name'], cluster_name))
+                    "Resolving '{}' for cluster '{}' at time {}...".format(rule['name'],
+                                                                           cluster_name,
+                                                                           time or "now"))
                 # noinspection PyBroadException
                 try:
                     self.logger.debug("REQUEST: " + query)
-                    query_res = self.pc.custom_query(query)
+                    if time:
+                        query_res = self.pc.custom_query(query, params={'time': str(time)})
+                    else:
+                        query_res = self.pc.custom_query(query)
                     self.logger.debug("RESPONSE: " + str(query_res))
                     raw_report[cluster_name][rule['name']]['sli'] = float(
                         query_res[0]["value"][1]) * 100

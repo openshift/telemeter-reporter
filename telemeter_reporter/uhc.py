@@ -1,8 +1,18 @@
 # -*- coding: utf-8 -*-
+import datetime
 import logging
+from typing import List, NamedTuple
 
 import jwt
 import requests
+
+
+class Cluster(NamedTuple):
+    id: str
+    name: str
+    external_id: str
+    creation_timestamp: datetime.datetime
+    openshift_version: str
 
 
 class UnifiedHybridClient(object):
@@ -57,7 +67,7 @@ class UnifiedHybridClient(object):
                 "Unable to obtain OpenID access token from {}. Response: {}".format(self.iss_url,
                                                                                     str(response)))
 
-    def search_clusters(self, query: str) -> dict:
+    def search_clusters(self, query: str) -> List[Cluster]:
         """
         Query a list of clusters from the UHC HTTP API.
 
@@ -65,7 +75,7 @@ class UnifiedHybridClient(object):
             this parameter is similar to the syntax of the WHERE clause of
             an SQL statement, but using the names of the attributes of the
             cluster instead of the names of the columns of a table.
-        :returns: (dict) the response from the API in dict format
+        :returns: (list) a list of Cluster objects returned from the API
         """
         self.logger.info("Querying UHC API for clusters matching \"{}\"".format(query))
         response = requests.get("{}/api/clusters_mgmt/v1/clusters".format(self.api_url),
@@ -79,4 +89,14 @@ class UnifiedHybridClient(object):
             raise Exception(
                 "HTTP Status Code {} ({})".format(response.status_code, response.content))
 
-        return data
+        cluster_list = []
+        for c in data['items']:
+            # The API returns RFC3339 timestamps. Python can't handle RFC3339 timestamps natively,
+            # so we have to use strptime and tack the UTC offset onto the input in order to produce
+            # a timezone-aware datetime object
+            creation_timestamp = datetime.datetime.strptime(c['creation_timestamp'] + "+00:00",
+                                                            '%Y-%m-%dT%H:%M:%S.%fZ%z')
+            cluster_list.append(Cluster(c['id'], c['name'], c['external_id'], creation_timestamp,
+                                        c['openshift_version']))
+
+        return cluster_list

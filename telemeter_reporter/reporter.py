@@ -3,6 +3,7 @@ import csv
 import io
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 from string import Template
 from typing import Dict, List, Union
 
@@ -11,7 +12,7 @@ import prometheus_api_client
 import requests
 from tabulate import tabulate
 
-from .uhc import UnifiedHybridClient
+from .uhc import Cluster, UnifiedHybridClient
 
 
 class SLIReporter(object):
@@ -87,63 +88,112 @@ class SLIReporter(object):
         except KeyError:
             self.html = self.default_html
 
-    def get_cluster_ids(self, search_query: str) -> Dict[str, str]:
+    def get_clusters(self, search_query: str) -> List[Cluster]:
         """
-        Gets the names and external_ids of all clusters matching
-        a search query from the UHC CLI
+        Gets the all clusters matching a search query from the UHC CLI that have
+        external_ids
 
         :param search_query: (str) a UHC search string (see UHC API docs)
-        :returns: (dict) a dict with selected cluster names as keys and
-            their external_ids as values
+        :returns: (list) a list of uhc.Cluster objects matching the query
         """
         cluster_list = self.uhc.search_clusters(search_query)
-        return {x["name"]: "_id='{}'".format(x["external_id"]) for x in cluster_list["items"] if
-                "external_id" in x.keys()}
+        return list(x for x in cluster_list if x.external_id)
 
-    def generate_report(self, cluster_ids: Dict[str, str], time: int = None) -> Dict[
-        str, Dict[str, Dict[str, float]]]:
+    @staticmethod
+    def __adjust_duration(duration: int, query_time: datetime, creation_timestamp: datetime) -> int:
+        effective_now = query_time or datetime.now(timezone.utc)
+        duration_start = effective_now - timedelta(days=duration)
+        if duration_start < creation_timestamp:
+            # New duration = floor(# of days between effective_now and cluster creation)
+            return (effective_now - creation_timestamp).days
+
+    def generate_report(self, clusters: List[Cluster], query_time: datetime = None,
+                        adjust_duration: bool = True) -> Dict[str, Dict[str, Dict[str, float]]]:
         """
         Generate a raw SLA report by running each configured query
         against the provided list of cluster IDs
 
-        :param cluster_ids: (dict) a dict with selected cluster names as
-            keys and their external_ids as values.
-        :param time: (int) if provided, tells Telemeter to query as if
-            it was sometime in the past. Provide a Unix timestamp here
+        :param clusters: (list) a list of Clusters to report on
+        :param query_time: (datetime) if provided, tells Telemeter to query as if
+            it was sometime in the past. Must be a timezone-aware datetime
+        :param adjust_duration: (bool) if True, adjust the duration parameter on
+            queries for clusters that were created before the start time of the
+            duration. E.g., if a cluster was created 3 days ago, but a 28-day
+            report is requested, adjust the duration to 3 days
         :returns: (dict) raw report data in a nested dictionary
         """
         raw_report = {}
-        for cluster_name, selector in cluster_ids.items():
-            raw_report[cluster_name] = {}
+        for cluster in clusters:
+            selector = "_id='{}'".format(cluster.external_id)
+
+            # Modify duration if the cluster was created before the start time of the requested
+            # global duration.
+            new_cluster_duration = None
+            if adjust_duration and 'duration' in self.config['global_vars']:
+                new_cluster_duration = self.__adjust_duration(
+                    int(self.config['global_vars']['duration']), query_time,
+                    cluster.creation_timestamp)
+                if new_cluster_duration:
+                    self.logger.warning("'{0}' was created only {1} days before {2}, so capping "
+                                        "global query duration for this cluster at {1}d".format(
+                        cluster.name, new_cluster_duration, query_time or "today"))
+                    # Update cluster name
+                    cluster = cluster._replace(name=cluster.name + '*')
+
+            raw_report[cluster.name] = {}
             for rule in self.config["rules"]:
-                raw_report[cluster_name][rule['name']] = {}
+                raw_report[cluster.name][rule['name']] = {}
+
+                # Prepare PromQL query parameters
                 try:
-                    query_params = {**{k: v for k, v in rule.items() if k != "query"},
-                                    **self.config['global_vars'], **{"sel": selector}, }
+                    query_params = {**self.config['global_vars'],
+                                    **{k: v for k, v in rule.items() if k != "query"},
+                                    **{"sel": selector}, }
                 except KeyError:
                     query_params = {**{k: v for k, v in rule.items() if k != "query"},
                                     **{"sel": selector}, }
+
+                # If cluster-level duration override is set, implement it
+                if new_cluster_duration:
+                    query_params['duration'] = new_cluster_duration
+
+                # Modify duration like above. This handles the case where a rule has its own local
+                # duration variable defined that overrides the global one
+                if adjust_duration and 'duration' in query_params:
+                    new_rule_duration = self.__adjust_duration(int(query_params['duration']),
+                                                               query_time,
+                                                               cluster.creation_timestamp)
+                    if new_rule_duration:
+                        query_params['duration'] = new_rule_duration
+                        self.logger.warning(
+                            "'{0}' was created only {1} days before {2}, so capping "
+                            "'{3}' query duration at {1}d".format(cluster.name, new_rule_duration,
+                                                                  query_time.now if query_time else "today",
+                                                                  rule['name']))
+
+                # Do the substitution
                 query = Template(rule["query"]).substitute(**query_params)
-                raw_report[cluster_name][rule['name']]['goal'] = float(rule['goal']) * 100
+                raw_report[cluster.name][rule['name']]['goal'] = float(rule['goal']) * 100
                 self.logger.info(
                     "Resolving '{}' for cluster '{}' at time {}...".format(rule['name'],
-                                                                           cluster_name,
-                                                                           time or "now"))
+                                                                           cluster.name,
+                                                                           query_time or "now"))
                 # noinspection PyBroadException
                 try:
                     self.logger.debug("REQUEST: " + query)
-                    if time:
-                        query_res = self.pc.custom_query(query, params={'time': str(time)})
+                    if query_time:
+                        query_res = self.pc.custom_query(query, params={
+                            'time': str(int(query_time.timestamp()))})
                     else:
                         query_res = self.pc.custom_query(query)
                     self.logger.debug("RESPONSE: " + str(query_res))
-                    raw_report[cluster_name][rule['name']]['sli'] = float(
+                    raw_report[cluster.name][rule['name']]['sli'] = float(
                         query_res[0]["value"][1]) * 100
                 except Exception as ex:
-                    raw_report[cluster_name][rule['name']]['sli'] = None
+                    raw_report[cluster.name][rule['name']]['sli'] = None
                     self.logger.warning(
                         "Failed to resolve '{}' for cluster '{}': {}".format(rule['name'],
-                                                                             cluster_name, str(ex)))
+                                                                             cluster.name, str(ex)))
                     self.logger.info("Full exception: " + repr(ex))
         return raw_report
 

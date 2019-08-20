@@ -108,15 +108,15 @@ sli_rep = SLIReporter(config)
 
 # Get Cluster external_ids
 if args.uhc_query:
-    cluster_ids = sli_rep.get_cluster_ids(args.uhc_query)
+    clusters = sli_rep.get_clusters(args.uhc_query)
 else:
-    cluster_ids = {}
+    clusters = []
     for uhc_query in config['clusters']:
-        cluster_ids.update(sli_rep.get_cluster_ids(uhc_query))
+        clusters += sli_rep.get_clusters(uhc_query)
 
 # Parse time argument
 if args.time:
-    report_time = dateparser.parse(args.time)
+    report_time = dateparser.parse(args.time, settings={'RETURN_AS_TIMEZONE_AWARE': True})
     if not report_time:
         logger.fatal("Failed to parse time argument. Exiting...")
         sys.exit(-3)
@@ -125,9 +125,9 @@ else:
 
 # Do the actual queries (this may take a while...)
 try:
-    raw_report = sli_rep.generate_report(cluster_ids, time=report_time.timestamp())
+    raw_report = sli_rep.generate_report(clusters, query_time=report_time)
 except AttributeError:
-    raw_report = sli_rep.generate_report(cluster_ids)
+    raw_report = sli_rep.generate_report(clusters)
 elapsed = time.perf_counter() - elapsed
 
 # Format the report

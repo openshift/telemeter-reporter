@@ -35,11 +35,12 @@ reported on **(can be overridden with the `--uhc-query` flag)**
 - `global_vars`: provide a list of strings/ints/floats here to make them available as global variables to each rule. For
 example, providing `- foo: "bar"` here will replace any instance of `${foo}` in each rule query with `bar`. At a minimum,
 you should provide a `duration` variable (in days) here **(can be overridden with the `--override` flag)**
-- `rules`: provide a list of SLI rules to evaluate (see below)
-  - `rules.name`: a human-readable name for the rule
-  - `rules.description`: a human-readable description for the rule (optional, only shown in HTML tooltips)
-  - `rules.goal`: the target-value for the query result. Usually a percentage represented as a float between 0 and 1.0
-  - `rules.query`: a valid PromQL query that returns the current value of the SLI (which will be compared to the goal).
+- `rules`: provide a list of SLI rules to evaluate (see below). You can also define local variables here, such as `rules[i].foo`,
+that will be inserted into that rule's query in the place of selectors like `${foo}` (similarly to `global_vars`)
+  - `rules[i].name`: a human-readable name for the rule
+  - `rules[i].description`: a human-readable description for the rule (optional, only shown in HTML tooltips)
+  - `rules[i].goal`: the target-value for the query result. Usually a percentage represented as a float between 0 and 1.0
+  - `rules[i].query`: a valid PromQL query that returns the current value of the SLI (which will be compared to the goal).
 Any instance of `${sel}` will be replaced with `_id=<cluster_id>`. You may also use global variables (see `global_vars`
 above)
 
@@ -47,8 +48,9 @@ above)
 ### Command line tool
 ```
 $ telemeter-reporter -h
-usage: telemeter-reporter [-h] [-c PATH] [-f FMT] [-u QUERY] [-t TITLE] [-b]
-                          [-a] [-m] [-p] [-l LEVEL] [-o VARS]
+usage: telemeter-reporter [-h] [-c PATH] [-f FMT] [-u QUERY] [-t TITLE]
+                          [-i TIME] [-b] [-a] [-n] [-m] [-p] [-l LEVEL]
+                          [-o VARS]
                           output
 
 Tool for generating reports on SLA/SLO compliance using Telemeter-LTS data
@@ -70,12 +72,22 @@ optional arguments:
                         UHC API
   -t TITLE, --title TITLE
                         Optional title for HTML reports
+  -i TIME, --time TIME  Generate a report at a certain point in the past.
+                        Strings like '2 weeks ago', 'last Monday', 'yesterday
+                        at 8pm', or 'October 1, 2018' are all acceptable
   -b, --no-browser      Don't open the resulting report in a web browser (if
                         HTML report is selected)
   -a, --auto-ext        Automatically append a file extension onto the
                         provided output path. Enabled by default when --format
                         is used multiple times. Has no effect when output =
                         stdout.
+  -n, --no-duration-adjust
+                        Disable automatic duration adjustment. By default, any
+                        user-defined 'duration' global query var is overridden
+                        with the cluster age if duration > cluster age.
+                        Clusters triggering this adjustment will have an
+                        asterisk appended to their name. This flag will
+                        disable this behavior.
   -m, --minify          Minify HTML output
   -p, --parents         Same behavior as mkdir's --parents option. Creates
                         parent directories in the output path if necessary.

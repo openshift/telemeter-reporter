@@ -88,19 +88,39 @@ class SLIReporter(object):
         except KeyError:
             self.html = self.default_html
 
-    def get_clusters(self, search_query: str) -> List[Cluster]:
+    def get_clusters(self, search_query: str, query_time: datetime = None) -> List[Cluster]:
         """
         Gets the all clusters matching a search query from the UHC CLI that have
         external_ids
 
         :param search_query: (str) a UHC search string (see UHC API docs)
+        :param query_time: (datetime) if provided, only returns clusters that were created before
+            this point in time
         :returns: (list) a list of uhc.Cluster objects matching the query
         """
         cluster_list = self.uhc.search_clusters(search_query)
-        return list(x for x in cluster_list if x.external_id)
+        if query_time:
+            return list(
+                x for x in cluster_list if x.external_id and x.creation_timestamp < query_time)
+        else:
+            return list(x for x in cluster_list if x.external_id)
 
     @staticmethod
     def __adjust_duration(duration: int, query_time: datetime, creation_timestamp: datetime) -> int:
+        """
+        Corrects query durations based on cluster age. If the age of the cluster
+        (relative to the "effective now" of the query) is shorter than the
+        requested duration, return a new duration that's slightly less than the
+        cluster age
+
+        :param duration: (int) user-requested duration to be corrected
+        :param query_time: (datetime or None) the time at which the user
+            requested the query be run, if the user set one. If None, assume
+            datetime.now(timezone.utc). Must be timezone-aware datetime
+        :param creation_timestamp: (datetime) the creation timestamp of the cluster
+        :returns: (int or None) the adjusted duration, or None if no adjustment
+            is necessary.
+        """
         effective_now = query_time or datetime.now(timezone.utc)
         duration_start = effective_now - timedelta(days=duration)
         if duration_start < creation_timestamp:

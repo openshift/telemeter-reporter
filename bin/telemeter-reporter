@@ -55,6 +55,12 @@ arg_parser.add_argument("-a", "--auto-ext", action="store_true",
                         help="Automatically append a file extension onto the provided output "
                              "path. Enabled by default when --format is used multiple times. Has "
                              "no effect when output = stdout.")
+arg_parser.add_argument("-n", "--no-duration-adjust", action="store_true",
+                        help="Disable automatic duration adjustment. By default, any user-defined "
+                             "'duration' global query var is overridden with the cluster age if "
+                             "duration > cluster age. Clusters triggering this adjustment will "
+                             "have an asterisk appended to their name. This flag will disable "
+                             "this behavior.")
 arg_parser.add_argument("-m", "--minify", action="store_true", help="Minify HTML output")
 arg_parser.add_argument("-p", "--parents", action="store_true",
                         help="Same behavior as mkdir's --parents option. Creates parent "
@@ -106,14 +112,6 @@ if args.format is None:
 elapsed = time.perf_counter()
 sli_rep = SLIReporter(config)
 
-# Get Cluster external_ids
-if args.uhc_query:
-    clusters = sli_rep.get_clusters(args.uhc_query)
-else:
-    clusters = []
-    for uhc_query in config['clusters']:
-        clusters += sli_rep.get_clusters(uhc_query)
-
 # Parse time argument
 if args.time:
     report_time = dateparser.parse(args.time, settings={'RETURN_AS_TIMEZONE_AWARE': True})
@@ -123,11 +121,17 @@ if args.time:
 else:
     report_time = None
 
+# Get Cluster external_ids
+if args.uhc_query:
+    clusters = sli_rep.get_clusters(args.uhc_query, report_time)
+else:
+    clusters = []
+    for uhc_query in config['clusters']:
+        clusters += sli_rep.get_clusters(uhc_query, report_time)
+
 # Do the actual queries (this may take a while...)
-try:
-    raw_report = sli_rep.generate_report(clusters, query_time=report_time)
-except AttributeError:
-    raw_report = sli_rep.generate_report(clusters)
+raw_report = sli_rep.generate_report(clusters, query_time=report_time,
+                                     adjust_duration=not args.no_duration_adjust)
 elapsed = time.perf_counter() - elapsed
 
 # Format the report
@@ -143,8 +147,8 @@ for fmt in args.format:
                 title = "SLO Report: {} to {} ".format(start.isoformat(), today.isoformat())
             except KeyError:
                 title = "SLO Report"
-        footer = "Report generated {} UTC in {:.2f} sec".format(
-            datetime.datetime.utcnow().strftime("%F %T"), elapsed)
+        footer = "Report generated {} in {:.2f} sec".format(
+            datetime.datetime.now(datetime.timezone.utc).strftime("%F %T %Z"), elapsed)
         headers = sli_rep.generate_headers(html_tooltips=True)
         formatted_report = sli_rep.format_report(headers=headers, raw_report=raw_report, fmt=fmt,
                                                  color=True, title=title, footer=footer)

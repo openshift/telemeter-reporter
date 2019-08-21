@@ -12,7 +12,6 @@ class Cluster(NamedTuple):
     name: str
     external_id: str
     creation_timestamp: datetime.datetime
-    openshift_version: str
 
 
 class UnifiedHybridClient(object):
@@ -96,7 +95,7 @@ class UnifiedHybridClient(object):
             # a timezone-aware datetime object
             creation_timestamp = datetime.datetime.strptime(c['creation_timestamp'] + "+00:00",
                                                             '%Y-%m-%dT%H:%M:%S.%fZ%z')
-            cluster_list.append(Cluster(c['id'], c['name'], c['external_id'], creation_timestamp,
-                                        c['openshift_version']))
+
+            cluster_list.append(Cluster(c['id'], c['name'], c['external_id'], creation_timestamp))
 
         return cluster_list

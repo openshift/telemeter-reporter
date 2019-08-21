@@ -16,7 +16,6 @@ html: |
       <head>
           <meta charset="utf-8">
           <title>${title}</title>
-          <p>This custom HTML template overrides the built-in template. Edit or remove the 'html' key in your config file to change this.</p>
           <link rel="stylesheet" href="https://unpkg.com/balloon-css/balloon.min.css">
           <style>
               ${style}
@@ -24,6 +23,7 @@ html: |
       </head>
       <body>
           <h2>${title}</h2>
+          <p>This custom HTML template overrides the built-in template. Edit or remove the 'html' key in your config file to change this.</p>
           ${table}
           <p>${footer}</p>
       </body>
@@ -72,8 +72,8 @@ rules:
                   ${sel}
                 })
               ),1
-            ))[${duration}d:1m]
-          ) / (${duration} * 24 * 60) > 0, 1
+          ))[${duration}d:10m]
+        ) / (${duration} * 24 * 6) > 0, 1
         )
   - name: "CtrlPlane API"
     description: "The proportion of successful (HTTP status < 500) responses to API requests as measured from Prometheus."
@@ -93,8 +93,8 @@ rules:
         sum_over_time(
           (
             sum(up{service='etcd',${sel}}) > bool 0
-          )[${duration}d:1m]
-        ) / (${duration} * 24 * 60) > 0, 1
+          )[${duration}d:10m]
+        ) / (${duration} * 24 * 6) > 0, 1
       )
   - name: "CtrlPlane Latency"
     description: "The proportion of time when no critical KubeAPILatencyHigh alerts are reported in Prometheus."
@@ -112,8 +112,8 @@ rules:
                   ${sel}
                 })
               ),1
-            ))[${duration}d:1m]
-          ) / (${duration} * 24 * 60) > 0, 1
+          ))[${duration}d:10m]
+        ) / (${duration} * 24 * 6) > 0, 1
         )
   - name: "Registry General"
     description: "The proportion of successful responses to API requests to the registry as measured from Prometheus."
@@ -123,8 +123,8 @@ rules:
         sum_over_time(
           (
             sum(up{service='image-registry',${sel}}) > bool 0
-          )[${duration}d:1m]
-        ) / (${duration} * 24 * 60) > 0, 1
+          )[${duration}d:10m]
+        ) / (${duration} * 24 * 6) > 0, 1
       )
   - name: "Compute General"
     description: "The proportion of time when no compute errors are reported as measured from critical alerts in Prometheus."
@@ -142,8 +142,8 @@ rules:
                   ${sel}
                 })
               ),1
-            ))[${duration}d:1m]
-          ) / (${duration} * 24 * 60) > 0, 1
+          ))[${duration}d:10m]
+        ) / (${duration} * 24 * 6) > 0, 1
         )
   - name: "Compute Resiliency"
     description: "The proportion of time when no compute mismatches are reported as measured from critical alerts in Prometheus."
@@ -161,8 +161,8 @@ rules:
                   ${sel}
                 })
               ),1
-            ))[${duration}d:1m]
-          ) / (${duration} * 24 * 60) > 0, 1
+          ))[${duration}d:10m]
+        ) / (${duration} * 24 * 6) > 0, 1
         )
   - name: "Support Monitoring"
     description: "The proportion of time when monitoring is available measured by critical alerts for monitoring, metrics, and prometheus in Prometheus."
@@ -180,7 +180,7 @@ rules:
                   ${sel}
                 })
               ),1
-            ))[${duration}d:1m]
-          ) / (${duration} * 24 * 60) > 0, 1
+          ))[${duration}d:10m]
+        ) / (${duration} * 24 * 6) > 0, 1
         )
 ...

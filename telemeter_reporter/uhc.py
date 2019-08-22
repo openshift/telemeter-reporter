@@ -3,6 +3,7 @@ import datetime
 import logging
 from typing import List, NamedTuple
 
+import dateparser
 import jwt
 import requests
 
@@ -55,8 +56,8 @@ class UnifiedHybridClient(object):
         :returns: (str) a short-lived access token
         """
         response = requests.post("{}/protocol/openid-connect/token".format(self.iss_url),
-                                 data={"grant_type":    "refresh_token",
-                                       "client_id":     self.client_id,
+                                 data={"grant_type": "refresh_token",
+                                       "client_id": self.client_id,
                                        "refresh_token": self.offline_token, },
                                  headers={"accept": "application/json"}, )
         try:
@@ -78,7 +79,7 @@ class UnifiedHybridClient(object):
         """
         self.logger.info("Querying UHC API for clusters matching \"{}\"".format(query))
         response = requests.get("{}/api/clusters_mgmt/v1/clusters".format(self.api_url),
-                                headers={"accept":        "application/json",
+                                headers={"accept": "application/json",
                                          "Authorization": "Bearer " + self.__get_access_token(), },
                                 params={"search": query}, verify=True, )
         if response.status_code == 200:
@@ -91,10 +92,9 @@ class UnifiedHybridClient(object):
         cluster_list = []
         for c in data['items']:
             # The API returns RFC3339 timestamps. Python can't handle RFC3339 timestamps natively,
-            # so we have to use strptime and tack the UTC offset onto the input in order to produce
-            # a timezone-aware datetime object
-            creation_timestamp = datetime.datetime.strptime(c['creation_timestamp'] + "+00:00",
-                                                            '%Y-%m-%dT%H:%M:%S.%fZ%z')
+            # so we have to use dateparser to produce a timezone-aware datetime object
+            creation_timestamp = dateparser.parse(c['creation_timestamp'],
+                                                  settings={'RETURN_AS_TIMEZONE_AWARE': True})
 
             cluster_list.append(Cluster(c['id'], c['name'], c['external_id'], creation_timestamp))
 

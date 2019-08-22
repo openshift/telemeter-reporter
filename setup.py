@@ -3,7 +3,7 @@ import setuptools
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
-setuptools.setup(name="telemeter-reporter", version="0.1.3", author="Anthony Byrne",
+setuptools.setup(name="telemeter-reporter", version="0.1.3.1", author="Anthony Byrne",
                  author_email="abyrne@redhat.com",
                  description="A tool for generating compliance reports based on Telemeter data.",
                  long_description=long_description, long_description_content_type="text/markdown",

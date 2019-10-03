@@ -1,0 +1,23 @@
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  generation: 1
+  name: telemeter-reporter
+  namespace: sd-sre
+  resourceVersion: '231767094'
+  selfLink: >-
+    /apis/image.openshift.io/v1/namespaces/sd-sre/imagestreams/telemeter-reporter
+spec:
+  lookupPolicy:
+    local: false
+status:
+  dockerImageRepository: 'docker-registry.default.svc:5000/sd-sre/telemeter-reporter'
+  tags:
+    - items:
+        - created: '2019-09-20T18:34:11Z'
+          dockerImageReference: >-
+            docker-registry.default.svc:5000/sd-sre/telemeter-reporter@sha256:dd8702460fae9945204fda423a1fcd4c746cffb38c642de4ff23d563f5794d2c
+          generation: 1
+          image: >-
+            sha256:dd8702460fae9945204fda423a1fcd4c746cffb38c642de4ff23d563f5794d2c
+      tag: latest

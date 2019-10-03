@@ -1,0 +1,32 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  labels:
+    app: telemeter-reporter
+  name: telemeter-reporter
+  namespace: sd-sre
+  resourceVersion: '70844292'
+  selfLink: >-
+    /apis/build.openshift.io/v1/namespaces/sd-sre/buildconfigs/telemeter-reporter
+spec:
+  failedBuildsHistoryLimit: 5
+  nodeSelector: null
+  output:
+    to:
+      kind: ImageStreamTag
+      name: 'telemeter-reporter:latest'
+  postCommit: {}
+  resources: {}
+  runPolicy: Serial
+  source:
+    git:
+      uri: 'https://github.com/openshift/telemeter-reporter.git'
+    type: Git
+  strategy:
+    sourceStrategy:
+      forcePull: true
+      from:
+        kind: ImageStreamTag
+        name: 'python:latest'
+        namespace: openshift
+    type: Source

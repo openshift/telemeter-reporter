@@ -1,0 +1,63 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    job-name: telemeter-reporter-initjob
+  name: telemeter-reporter-initjob
+  namespace: sd-sre
+  resourceVersion: '62319501'
+  selfLink: /apis/batch/v1/namespaces/sd-sre/jobs/telemeter-reporter-initjob
+spec:
+  backoffLimit: 6
+  completions: 1
+  parallelism: 1
+  template:
+    spec:
+      containers:
+        - command:
+            - sh
+            - '-c'
+            - >-
+              telemeter-reporter --log info --format html --format csv --parents
+              --minify /telemeter-reporter-storage/reports/$(date
+              +"%Y-%m/%F.28dSLOReport")
+          env:
+            - name: TELEMETER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  key: telemeterToken
+                  name: telemeter-reporter-secret
+            - name: UHC_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  key: uhcToken
+                  name: telemeter-reporter-secret
+            - name: TELEMETER_REPORTER_CONFIG
+              value: /telemeter-reporter-config/reporter_conf.yml
+            - name: TELEMETER_SSL_CA
+              value: /telemeter-reporter-config/RHCertBundle.pem
+          image: >-
+            docker-registry.default.svc:5000/sd-sre/telemeter-reporter
+          imagePullPolicy: Always
+          name: telemeter-reporter-initjob
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /telemeter-reporter-config
+              name: config-volume
+            - mountPath: /telemeter-reporter-storage
+              name: telemeter-reporter-storage
+      dnsPolicy: ClusterFirst
+      restartPolicy: OnFailure
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - configMap:
+            defaultMode: 420
+            name: telemeter-reporter-config
+          name: config-volume
+        - name: telemeter-reporter-storage
+          persistentVolumeClaim:
+            claimName: telemeter-reporter-storage-claim

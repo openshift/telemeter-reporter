@@ -1,0 +1,192 @@
+apiVersion: v1
+data:
+  RHCertBundle.pem: 
+    <Place Cert Chain Here>
+  reporter_conf.yml: >-
+    ---
+
+    html: |
+      <!DOCTYPE html> 
+      <html>
+          <head>
+              <meta charset="utf-8">
+              <title>${title}</title>
+              <style>
+                  ${style}
+              </style>
+              <link rel="stylesheet" href="https://unpkg.com/balloon-css/balloon.min.css">
+          </head>
+          <body>
+              <h2>${title}</h2>
+              <p><em>See the <a href="https://mojo.redhat.com/docs/DOC-1189726">OSD Service Level Objectives FAQ</a> for more information on the SLI values shown below.</em></p>
+              ${table}
+              <p><small>*indicates that the cluster was less than 28 days old when this report was generated, so its SLIs had to be calculated with shorter timeframes.</small>
+              <p>${footer}</p>
+          </body>
+      </html>
+    css:
+    "*{font-family:Sans-serif}table{border-collapse:collapse;border-spacing:0;empty-cells:show;border:1px
+    solid #cbcbcb}td,th{font-size:inherit;margin:0;overflow:visible;padding:.5em
+    1em;border-bottom:1px solid
+    #cbcbcb}thead{background-color:#e0e0e0;color:#000;text-align:left;vertical-align:bottom}td{background-color:transparent}tr:nth-child(2n-1)
+    td{background-color:#f2f2f2}tbody>tr:last-child>td{border-bottom-width:0}.danger{color:red;font-weight:700}.caution{color:#ff8c00;font-weight:700}.success{color:green}"
+
+    api:
+      telemeter:
+        url: "https://telemeter-lts.datahub.redhat.com"
+      uhc:
+        url: "https://api.openshift.com"
+        public_key: |
+                -----BEGIN PUBLIC KEY-----
+                MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA5MvhbE1Mxr2FUYGZiH0z
+                6p+kV+FIUHp4ErxkD6S8Sc5OB7IjRKDSsJzmuwR803cKpeKoIkkUTiznYwCBqAUd
+                P3bIZ8k97X6GX19dOSqL4ej1rjYZYAf9/Jt/Z+0PzIjX50z6TpqeGoh7+6P+634S
+                vbdjatnhTAQ3qsBXfPOHPIPRAZkGfmlM1EdvIlm/d2hQ7nDSETbVC4YHY+iESvUh
+                re+aNmqJU/E6fRnGwFTPS20fPLE5bUNbshvTXn5c+bxtWK9bSCHCRVYUF9QWwDoF
+                X9gGOIpSScHAKQLRR16yOQjOioZ2FeVZnDpWNvZelbQ7LtLN0H5uCJsqDoZDDhDW
+                eFp+25O9ih5M9auT/2IepUlOq3OBMj7i3CJXrvjNQiuGkPHp9xN6kd5H4E5hcqUT
+                mfYdgf1IuXP0cTwYtQor21dWBSpFvxW8l1HGLOaO/rSetNRJ+tZ7FKUK5L6crt1N
+                72AGIay96gNOWNe4POOG/ML1r4h3SKBFdMPwJ+R5KDg7+oRcUT4kLuFtWuQG7bKL
+                JhIxw/SnVFajLGt1d3+OCqX6ozuUbdEW31f9iLZd4w+NUSSHjxP1Uvalk5QfUro9
+                w9fTW73jRIUASnbHunopjt/IkiQswrdIwpfpeBokcf9O757/i0kctQ5M1gyPf4+0
+                yPfuDVkeBAHygoxNJU9H3C0CAwEAAQ==
+                -----END PUBLIC KEY-----
+    clusters:
+      - "managed = 't'"
+    global_vars:
+      duration: 28
+    rules:
+      - name: "CtrlPlane General"
+        description: "The proportion of time when no control plane errors are reported as measured from critical alerts in Prometheus."
+        goal: 0.995
+        query: |
+            clamp_max(
+              sum_over_time(
+                (clamp_max(
+                  sum without (alertstate, severity) (
+                    absent(alerts{
+                      severity='critical',
+                      alertstate='firing',
+                      namespace=~'(default|kube.*|openshift.*)',
+                      alertname=~'(KubeAPIDown|KubeControllerManagerDown|KubeSchedulerDown|KubeletDown|KubeAPILatencyHigh)',
+                      ${sel}
+                    })
+                  ),1
+                ))[${duration}d:1m]
+              ) / (${duration} * 24 * 60) > 0, 1
+            )
+      - name: "CtrlPlane API"
+        description: "The proportion of successful (HTTP status < 500) responses to API requests as measured from Prometheus."
+        goal: 0.999
+        query: |
+          (
+            (
+              sum(sum_over_time(code:apiserver_request_count:rate:sum{${sel}}[${duration}d])) -
+              sum(sum_over_time(code:apiserver_request_count:rate:sum{code=~'5.*',${sel}}[${duration}d]))
+            ) / sum(sum_over_time(code:apiserver_request_count:rate:sum{${sel}}[${duration}d]))
+          ) OR (absent(code:apiserver_request_count:rate:sum{code=~'5.*',${sel}} == 0))
+      - name: "CtrlPlane etcd"
+        description: "The proportion of time when at least one etcd pod reports as ready as measured by Prometheus."
+        goal: 0.999
+        query: |
+          clamp_max(
+            sum_over_time(
+              (
+                sum(up{service='etcd',${sel}}) > bool 0
+              )[${duration}d:1m]
+            ) / (${duration} * 24 * 60) > 0, 1
+          )
+      - name: "CtrlPlane Latency"
+        description: "The proportion of time when no critical KubeAPILatencyHigh alerts are reported in Prometheus."
+        goal: 0.995
+        query: |
+            clamp_max(
+              sum_over_time(
+                (clamp_max(
+                  sum without (alertstate, severity) (
+                    absent(alerts{
+                      severity='critical',
+                      alertstate='firing',
+                      namespace=~'(default|kube.*|openshift.*)',
+                      alertname=~'(KubeAPILatencyHigh)',
+                      ${sel}
+                    })
+                  ),1
+                ))[${duration}d:1m]
+              ) / (${duration} * 24 * 60) > 0, 1
+            )
+      - name: "Registry General"
+        description: "The proportion of successful responses to API requests to the registry as measured from Prometheus."
+        goal: 0.99
+        query: |
+          clamp_max(
+            sum_over_time(
+              (
+                sum(up{service='image-registry',${sel}}) > bool 0
+              )[${duration}d:1m]
+            ) / (${duration} * 24 * 60) > 0, 1
+          )
+      - name: "Compute General"
+        description: "The proportion of time when no compute errors are reported as measured from critical alerts in Prometheus."
+        goal: 0.995
+        query: |
+            clamp_max(
+              sum_over_time(
+                (clamp_max(
+                  sum without (alertstate, severity) (
+                    absent(alerts{
+                      severity='critical',
+                      alertstate='firing',
+                      namespace=~'(default|kube.*|openshift.*)',
+                      alertname=~'(KubeClientCertificateExpiration|KubePodCrashLooping|KubePodNotReady|KubePersistentVolumeUsageCritical)',
+                      ${sel}
+                    })
+                  ),1
+                ))[${duration}d:1m]
+              ) / (${duration} * 24 * 60) > 0, 1
+            )
+      - name: "Compute Resiliency"
+        description: "The proportion of time when no compute mismatches are reported as measured from critical alerts in Prometheus."
+        goal: 0.99
+        query: |
+            clamp_max(
+              sum_over_time(
+                (clamp_max(
+                  sum without (alertstate, severity) (
+                    absent(alerts{
+                      severity='critical',
+                      alertstate='firing',
+                      namespace=~'(default|kube.*|openshift.*)',
+                      alertname=~'(.*Mismatch|.*Stuck)',
+                      ${sel}
+                    })
+                  ),1
+                ))[${duration}d:1m]
+              ) / (${duration} * 24 * 60) > 0, 1
+            )
+      - name: "Support Monitoring"
+        description: "The proportion of time when monitoring is available measured by critical alerts for monitoring, metrics, and prometheus in Prometheus."
+        goal: 0.9999
+        query: |
+            clamp_max(
+              sum_over_time(
+                (clamp_max(
+                  sum without (alertstate, severity) (
+                    absent(alerts{
+                      severity='critical',
+                      alertstate='firing',
+                      namespace=~'(default|kube.*|openshift.*)',
+                      alertname=~'(ClusterMonitoringOperator.*|KubeStateMetricsDown|Prometheus.*Down)',
+                      ${sel}
+                    })
+                  ),1
+                ))[${duration}d:1m]
+              ) / (${duration} * 24 * 60) > 0, 1
+            )
+kind: ConfigMap
+metadata:
+  name: telemeter-reporter-config
+  namespace: sd-sre
+  resourceVersion: '62104914'
+  selfLink: /api/v1/namespaces/sd-sre/configmaps/telemeter-reporter-config
+

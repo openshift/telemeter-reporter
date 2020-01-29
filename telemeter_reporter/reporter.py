@@ -229,16 +229,13 @@ class SLIReporter(object):
             prefix = "<span data-balloon-length='large' data-balloon-pos='up' " \
                      "aria-label='{desc}'>{name} {t}</span>"
 
-            head_gen = [(prefix.format(name=r['name'],
+            head_gen = [(prefix.format(name=r['name'].replace("General", "Errors"),
                                        desc=(r['description'] if 'description' in r else "n/a"),
-                                       t="Goal"), prefix.format(name=r['name'], desc=(
-                r['description'] if 'description' in r else "n/a"), t="Perf.")) for r in
-                        self.config["rules"]]
-
+                                       t="("+str(r["goal"]*100)+"%)")) for r in self.config["rules"]]
         else:
-            head_gen = [(r["name"] + " Goal", r["name"] + " Perf.") for r in self.config["rules"]]
+            head_gen = [(r["name"] + " Goal", r["name"] + str(r["goal"])) for r in self.config["rules"]]
 
-        return ["Cluster"] + list(sum(head_gen, (), ))
+        return ["Cluster"] + head_gen
 
     def format_report(self, headers: List[str], raw_report: Dict[str, Dict[str, Dict[str, float]]],
                       fmt: str, color: bool, title: str = None, footer: str = None) -> str:
@@ -258,12 +255,10 @@ class SLIReporter(object):
         table = []
         for cluster_name, rules in raw_report.items():
             row = [cluster_name]
-            for rule_name, scores in rules.items():
+            for _, scores in rules.items():
                 sli_f = self.__format_sli(value=scores['sli'], goal=scores['goal'],
                                           fmt=(fmt if fmt != 'csv' else None), color=color)
-                goal_f = self.__format_sli(value=scores['goal'], goal=None,
-                                           fmt=(fmt if fmt != 'csv' else None), color=False)
-                row += [goal_f, sli_f]
+                row += [sli_f]
             table.append(row)
         if fmt == 'csv':
             str_buff = io.StringIO()

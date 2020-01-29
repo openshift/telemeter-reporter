@@ -211,10 +211,7 @@ class SLIReporter(object):
                         query_res[0]["value"][1]) * 100
                 except Exception as ex:
                     raw_report[cluster.name][rule['name']]['sli'] = None
-                    self.logger.warning(
-                        "Failed to resolve '{}' for cluster '{}': {}".format(rule['name'],
-                                                                             cluster.name, str(ex)))
-                    self.logger.info("Full exception: " + repr(ex))
+                    self.logger.error("QueryFailure:'{}'".format(repr(ex)))
         return raw_report
 
     def generate_headers(self, html_tooltips: bool = False) -> List[str]:

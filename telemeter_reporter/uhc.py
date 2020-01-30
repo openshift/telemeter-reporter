@@ -91,11 +91,15 @@ class UnifiedHybridClient(object):
 
         cluster_list = []
         for c in data['items']:
-            # The API returns RFC3339 timestamps. Python can't handle RFC3339 timestamps natively,
-            # so we have to use dateparser to produce a timezone-aware datetime object
-            creation_timestamp = dateparser.parse(c['creation_timestamp'],
-                                                  settings={'RETURN_AS_TIMEZONE_AWARE': True})
+            try:
+                # The API returns RFC3339 timestamps. Python can't handle RFC3339 timestamps natively,
+                # so we have to use dateparser to produce a timezone-aware datetime object
+                creation_timestamp = dateparser.parse(c['creation_timestamp'],
+                                                    settings={'RETURN_AS_TIMEZONE_AWARE': True})
 
-            cluster_list.append(Cluster(c['id'], c['name'], c['external_id'], creation_timestamp))
+                cluster_list.append(Cluster(c['id'], c['name'], c['external_id'], creation_timestamp))
+            
+            except KeyError as e:
+                self.logger.info("ExternalIDFailure:{}.".format(str(e)))
 
         return cluster_list
